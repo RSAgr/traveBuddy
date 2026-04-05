@@ -1,0 +1,2 @@
+TRIPS = {}
+PRICE_HISTORY = {}
