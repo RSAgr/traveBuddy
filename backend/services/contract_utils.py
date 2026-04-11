@@ -3,6 +3,7 @@ import base64
 from pyteal import *
 from services.algorand_client import algod_client
 
+# There need to be a contract to lock the funds, and to release the fund...should we verify the booking?
 
 def approval_program():
     return compileTeal(Approve(), mode=Mode.Application)
