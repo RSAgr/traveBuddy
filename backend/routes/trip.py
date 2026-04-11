@@ -13,6 +13,12 @@ router = APIRouter()
 from dotenv import load_dotenv
 load_dotenv()
 
+@router.get("/status/{trip_id}")
+async def get_trip_status(trip_id: str):
+    if trip_id not in TRIPS:
+        raise HTTPException(status_code=404, detail="Trip not found")
+    return TRIPS[trip_id]
+
 @router.post("/create_trip")
 async def create_trip(data: dict):
     try:

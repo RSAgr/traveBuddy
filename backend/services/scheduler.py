@@ -24,6 +24,7 @@ async def run_trip(trip_id):
         decision = evaluate(constraints, components, PRICE_HISTORY[trip_id])
 
         trip = TRIPS[trip_id]
+        trip["components"] = components
         constraints = trip["constraints"]
         app_id = trip["contract"]["app_id"]
         user_address = trip["contract"]["user_address"]
