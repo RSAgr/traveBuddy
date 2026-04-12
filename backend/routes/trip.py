@@ -29,7 +29,7 @@ async def create_trip(data: dict):
         user_id = data["user_id"]
         query = data["query"]
         #user_address = data["user_address"] 
-        user_address = data.get("user_address") or os.getenv("USER_ADDRESS")
+        user_address = os.getenv("USER_ADDRESS")
         if not user_address:
             raise HTTPException(status_code=400, detail="Missing user_address (request or USER_ADDRESS env)")
         print(f"User Address: {user_address}")

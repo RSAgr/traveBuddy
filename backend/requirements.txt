@@ -1,0 +1,6 @@
+uvicorn
+py-algorand-sdk
+fastapi
+google-generativeai
+dotenv
+pyteal
