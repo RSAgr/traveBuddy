@@ -28,11 +28,13 @@ export default function Dashboard() {
     const [isPolling, setIsPolling] = useState(false);
     const [functionCalls, setFunctionCalls] = useState<string[]>([]);
     const hasInitiated = useRef(false);
+    const alreadyBookedRef = useRef(false);
 
     // Make proxy / backend request to start trip
     const startTrip = useCallback(async (prompt: string, address: string = "dummy") => {
         setIsPolling(true);
         setFunctionCalls(["Agent Analyzing Request..."]);
+        alreadyBookedRef.current = false;
         
         try {
             const res = await fetch("/api/proxy/create_trip", {
@@ -100,11 +102,25 @@ export default function Dashboard() {
                     }));
                 }
 
-                if (data.status === "BOOKED") {
+                if (data.status === "BOOKED" && !alreadyBookedRef.current) {
+                    alreadyBookedRef.current = true;
                     setIsPolling(false);
                     setFunctionCalls([]);
                     clearInterval(interval);
-                    addMessage({ role: "assistant", text: "✅ I have executed the booking successfully via blockchain contract!" });
+                    
+                    let componentsStr = "";
+                    if (data.booking && data.booking.components) {
+                        const formatted = data.booking.components.map((c: any) => 
+                            `${c.mode === 'hotel' ? 'Hotel' : c.mode === 'flight' ? 'Flight' : 'Train'}: ₹${c.price}`
+                        ).join(", ");
+                        componentsStr = `\n\n**Booked Details**: ${formatted}`;
+                    }
+
+                    addMessage({ role: "assistant", text: `✅ I have executed the booking successfully via blockchain contract!${componentsStr}` });
+                } else if (data.status === "BOOKED") {
+                    setIsPolling(false);
+                    setFunctionCalls([]);
+                    clearInterval(interval);
                 }
             } catch (e) {
                 console.error("Polling error", e);
