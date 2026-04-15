@@ -83,7 +83,7 @@ def parse_query_llm(query: str):
         # 🔹 Step 3: Validate + defaults
         destination = data.get("destination", "Unknown")
 
-        budget = int(data.get("budget", 10000))
+        budget = int(data.get("budget", 1000))
 
         days = int(data.get("deadline_days_from_now", 7))
         deadline = datetime.now() + timedelta(days=days)
@@ -108,7 +108,7 @@ def parse_query_llm(query: str):
         # Strong fallback
         return {
             "destination": "Nowhere",
-            "budget": 000,
+            "budget": 1000,
             "deadline": int((datetime.now() + timedelta(days=7)).timestamp()),
             "transport_modes": ["flight", "train"]
         }
