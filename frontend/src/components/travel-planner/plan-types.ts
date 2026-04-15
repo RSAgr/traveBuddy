@@ -33,7 +33,7 @@ export interface Activity {
 }
 
 export interface Transports {
-    flights?: TransportDetails[] | null;
+    cabs?: TransportDetails[] | null;
     trains?: TransportDetails[] | null;
 }
 
@@ -69,8 +69,8 @@ export interface PlanState {
 
 export function emptyPlanState(): PlanState {
     return {
-        outbound: { flights: [], trains: [] },
-        inbound: { flights: [], trains: [] },
+        outbound: { cabs: [], trains: [] },
+        inbound: { cabs: [], trains: [] },
         hotels: [],
         itinerary: [],
     };
@@ -98,10 +98,10 @@ export function mergePlan(
     // Outbound
     if (incoming.outbound != null) {
         merged.outbound = {
-            flights:
-                incoming.outbound.flights != null
-                    ? incoming.outbound.flights
-                    : current.outbound.flights,
+            cabs:
+                incoming.outbound.cabs != null
+                    ? incoming.outbound.cabs
+                    : current.outbound.cabs,
             trains:
                 incoming.outbound.trains != null
                     ? incoming.outbound.trains
@@ -112,10 +112,10 @@ export function mergePlan(
     // Inbound
     if (incoming.inbound != null) {
         merged.inbound = {
-            flights:
-                incoming.inbound.flights != null
-                    ? incoming.inbound.flights
-                    : current.inbound.flights,
+            cabs:
+                incoming.inbound.cabs != null
+                    ? incoming.inbound.cabs
+                    : current.inbound.cabs,
             trains:
                 incoming.inbound.trains != null
                     ? incoming.inbound.trains
