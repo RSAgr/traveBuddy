@@ -4,7 +4,7 @@
 #         "destination": "Goa",
 #         "budget": 10000,
 #         "deadline": 1716144000,
-#         "transport_modes": ["flight", "train"]
+#         "transport_modes": ["cab", "train"]
 #     }
 
 import json
@@ -21,7 +21,7 @@ Return ONLY valid JSON in this format:
   "destination": string,
   "budget": integer,
   "deadline_days_from_now": integer,
-  "transport_modes": list of ["flight", "train", "bus"]
+  "transport_modes": list of ["cab", "train", "bus"]
 }}
 
 If any field is missing or unclear, do write a best guess or use defaults
@@ -110,5 +110,5 @@ def parse_query_llm(query: str):
             "destination": "Nowhere",
             "budget": 1000,
             "deadline": int((datetime.now() + timedelta(days=7)).timestamp()),
-            "transport_modes": ["flight", "train"]
+            "transport_modes": ["cab", "train"]
         }
