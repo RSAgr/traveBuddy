@@ -88,11 +88,11 @@ def parse_query_llm(query: str):
         days = int(data.get("deadline_days_from_now", 7))
         deadline = datetime.now() + timedelta(days=days)
 
-        transport_modes = data.get("transport_modes", ["flight", "train", "bus"])
+        transport_modes = data.get("transport_modes", ["cab", "train", "bus"])
 
         # Ensure it's a list
         if not isinstance(transport_modes, list):
-            transport_modes = ["flight", "train", "bus"]
+            transport_modes = ["cab", "train", "bus"]
 
         return {
             "destination": destination,
