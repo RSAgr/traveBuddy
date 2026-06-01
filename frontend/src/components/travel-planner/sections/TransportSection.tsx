@@ -1,7 +1,7 @@
 "use client";
 
 import { type Transports, type TransportDetails } from "../plan-types";
-import { Plane, Train, Clock, ExternalLink } from "lucide-react";
+import { Plane, Train, Clock, ExternalLink, Car } from "lucide-react";
 
 function formatTime(iso: string): string {
     try {
@@ -40,8 +40,8 @@ function duration(dep: string, arr: string): string {
     }
 }
 
-function TransportCard({ t, kind }: { t: TransportDetails; kind: "flight" | "train" }) {
-    const Icon = kind === "flight" ? Plane : Train;
+function TransportCard({ t, kind }: { t: TransportDetails; kind: "cab" | "train" }) {
+    const Icon = kind === "cab" ? Car : Train;
     return (
         <div className="tp-transport-card group">
             <div className="flex items-center gap-2 mb-3">
@@ -96,16 +96,16 @@ export default function TransportSection({
     title: string;
     transports: Transports;
 }) {
-    const flights = transports.flights ?? [];
+    const cabs = transports.cabs ?? [];
     const trains = transports.trains ?? [];
-    if (flights.length === 0 && trains.length === 0) return null;
+    if (cabs.length === 0 && trains.length === 0) return null;
 
     return (
         <section className="tp-section">
             <h2 className="tp-section-title">{title}</h2>
             <div className="tp-hscroll">
-                {flights.map((f, i) => (
-                    <TransportCard key={`f-${i}`} t={f} kind="flight" />
+                {cabs.map((c, i) => (
+                    <TransportCard key={`c-${i}`} t={c} kind="cab" />
                 ))}
                 {trains.map((t, i) => (
                     <TransportCard key={`t-${i}`} t={t} kind="train" />

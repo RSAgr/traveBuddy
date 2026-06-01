@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/proxy/:path*",
-        destination: "http://127.0.0.1:8000/:path*",
+        destination: "https://travebuddy.onrender.com/:path*",
       },
     ];
   },

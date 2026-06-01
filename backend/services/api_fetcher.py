@@ -3,12 +3,12 @@ import random
 def fetch_prices(constraints):
     components = []
 
-    if "flight" in constraints["transport_modes"]:
-        components.append({
-            "type": "transport",
-            "mode": "flight",
-            "price": random.randint(300, 600)
-        })
+    # Force cab to always trigger for demonstration regardless of LLM logic
+    components.append({
+        "type": "transport",
+        "mode": "cab",
+        "price": random.randint(1500, 3500)
+    })
 
     if "train" in constraints["transport_modes"]:
         components.append({

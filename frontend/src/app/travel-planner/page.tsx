@@ -74,8 +74,8 @@ export default function Dashboard() {
                 // data = { status, components, constraints, contract }
                 if (data.components) {
                     // Adapt the numeric prices to our Transport/Hotel plan UI state
-                    const flights = data.components.filter((c: any) => c.mode === "flight").map((c: any) => ({
-                        name: "Found Flight Option",
+                    const cabs = data.components.filter((c: any) => c.mode === "cab").map((c: any) => ({
+                        name: "Found Cab Option",
                         price: c.price,
                         booking_link: "#",
                         departure_from_source: new Date().toISOString(),
@@ -101,7 +101,7 @@ export default function Dashboard() {
 
                     setPlan(prev => ({
                         ...prev,
-                        outbound: { flights, trains },
+                        outbound: { cabs, trains },
                         hotels
                     }));
                 }
@@ -115,9 +115,15 @@ export default function Dashboard() {
                     let componentsStr = "";
                     if (data.booking && data.booking.components) {
                         const formatted = data.booking.components.map((c: any) => 
-                            `${c.mode === 'hotel' ? 'Hotel' : c.mode === 'flight' ? 'Flight' : 'Train'}: ₹${c.price}`
+                            `${c.mode === 'hotel' ? 'Hotel' : c.mode === 'cab' ? 'Cab' : 'Train'}: ₹${c.price}`
                         ).join(", ");
-                        componentsStr = `\n\n**Booked Details**: ${formatted}`;
+                        
+                        let txDetails = "";
+                        if (data.contract) {
+                            txDetails = `\n**App ID**: ${data.contract.app_id}\n**Transaction ID**: ${data.contract.create_tx_id}`;
+                        }
+                        
+                        componentsStr = `\n\n**Booked Details**: ${formatted}${txDetails}`;
                     }
 
                     addMessage({ role: "assistant", text: `I have executed the booking successfully via blockchain contract!${componentsStr}` });
@@ -171,7 +177,7 @@ export default function Dashboard() {
         setInput("");
     }
 
-    const hasOutbound = (plan.outbound.flights?.length ?? 0) > 0 || (plan.outbound.trains?.length ?? 0) > 0;
+    const hasOutbound = (plan.outbound.cabs?.length ?? 0) > 0 || (plan.outbound.trains?.length ?? 0) > 0;
     const hasHotels = plan.hotels.length > 0;
 
     if (!ready) {
