@@ -116,11 +116,11 @@ def lock_funds(app_id, sender, amount):
 
 
 def release_funds(app_id, sender):
-    return call_app(app_id, sender, ["release"], fee_multiplier=2)
+    return call_app(app_id, sender, ["release"], fee_multiplier=1)
 
 
 def refund_funds(app_id, sender):
-    return call_app(app_id, sender, ["refund"], fee_multiplier=2)
+    return call_app(app_id, sender, ["refund"], fee_multiplier=1)
 
 
 def build_itinerary_hash(trip_id, constraints, components):
@@ -141,7 +141,7 @@ def commit_itinerary(app_id, sender, itinerary_hash_hex):
     if len(hash_bytes) != 32:
         raise ValueError("itinerary_hash_hex must be a 32-byte sha256 hex string")
 
-    return call_app(app_id, sender, ["commit_itinerary", hash_bytes], fee_multiplier=2)
+    return call_app(app_id, sender, ["commit_itinerary", hash_bytes], fee_multiplier=1)
 
 
 def deploy_contract(user_address, budget, trip_id, receiver_address=None, deadline=None):

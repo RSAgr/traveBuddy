@@ -9,7 +9,9 @@ import { NextRequest, NextResponse } from "next/server";
  * Returns: { predictions: { description: string; place_id: string }[] }
  */
 export async function POST(req: NextRequest) {
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    //const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    const apiKey = "AIzaSyCIuM-ixp6EiCXxhmK19BLAJeqPQgGakO8";
+    
     if (!apiKey) {
         console.error("Missing Google Maps API key in env")
         return NextResponse.json(

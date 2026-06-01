@@ -120,7 +120,7 @@ export default function Dashboard() {
                         componentsStr = `\n\n**Booked Details**: ${formatted}`;
                     }
 
-                    addMessage({ role: "assistant", text: `✅ I have executed the booking successfully via blockchain contract!${componentsStr}` });
+                    addMessage({ role: "assistant", text: `I have executed the booking successfully via blockchain contract!${componentsStr}` });
                 } else if (data.status === "BOOKED") {
                     setIsPolling(false);
                     setFunctionCalls([]);

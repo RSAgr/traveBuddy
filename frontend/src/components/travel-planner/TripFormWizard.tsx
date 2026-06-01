@@ -379,7 +379,7 @@ export default function TripFormWizard() {
                             <input
                                 type="number"
                                 className={inputClass + " pl-9"}
-                                placeholder="Total Budget e.g. 50000"
+                                placeholder="Total Budget e.g. 5000"
                                 min="0"
                                 value={details.budget}
                                 onChange={(e) =>
