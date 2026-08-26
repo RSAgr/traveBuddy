@@ -15,7 +15,12 @@ def _route_for(constraints):
 
 
 def _snapshot_for(trip_id, constraints, components):
-    total_cost = sum(c["price"] for c in components)
+    bookable_components = [
+        component
+        for component in components
+        if component["type"] in {"transport", "stay"}
+    ]
+    total_cost = sum(c["price"] for c in bookable_components)
     transport_modes = [c["mode"] for c in components if c["type"] == "transport"]
     primary_component = next((c for c in components if c["type"] == "transport"), components[0])
     features = primary_component.get("features", {})

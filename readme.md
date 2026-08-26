@@ -125,7 +125,10 @@ This design eliminates the need to trust TraveBuddy—you only trust the immutab
    ALGOD_TOKEN=<your-algorand-node-token>
    USER_MNEMONIC=<your-algorand-account-mnemonic>
    GEMINI_API_KEY=<your-google-generative-ai-key>
+   MOCK_TRAVEL_DATA_ENABLED=true
    ```
+
+   The local development price pipeline uses rich mock data for Ranchi to Puri, including flights, trains, buses, hotels, restaurants, and activities. Synthetic generation remains available as a fallback for other destinations.
 
    Create a `.env.local` file in the frontend directory with:
    ```

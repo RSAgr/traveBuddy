@@ -52,29 +52,29 @@ export default function Dashboard() {
                 // data = { status, components, constraints, contract }
                 if (data.components) {
                     // Adapt the numeric prices to our Transport/Hotel plan UI state
-                    const cabs = data.components.filter((c: any) => c.mode === "cab").map((c: any) => ({
-                        name: "Found Cab Option",
+                    const cabs = data.components.filter((c: any) => ["flight", "bus", "cab"].includes(c.mode)).map((c: any) => ({
+                        name: c.name ?? `${c.mode === "flight" ? "Flight" : c.mode === "bus" ? "Bus" : "Cab"} Option`,
                         price: c.price,
                         booking_link: "#",
                         departure_from_source: new Date().toISOString(),
                         arrival_at_destination: new Date(Date.now() + 3600000 * 2).toISOString(),
-                        description: "Evaluated by TraveBuddy Agent"
+                        description: `${c.operator ?? "Mock provider"} · ${c.route ?? "Ranchi to Puri"} · ${c.duration ?? "Timing available in mock catalog"}`
                     }));
                     const trains = data.components.filter((c: any) => c.mode === "train").map((c: any) => ({
-                        name: "Train Option",
+                        name: c.name ?? "Train Option",
                         price: c.price,
                         booking_link: "#",
                         departure_from_source: new Date().toISOString(),
                         arrival_at_destination: new Date(Date.now() + 3600000 * 12).toISOString(),
-                        description: "Evaluated by TraveBuddy Agent"
+                        description: `${c.train_number ?? ""} ${c.operator ?? "Indian Railways"} · ${c.route ?? "Ranchi to Puri"} · ${c.duration ?? ""}`
                     }));
                     const hotels = data.components.filter((c: any) => c.type === "stay").map((c: any) => ({
-                        name: "Hotel Found by Agent",
+                        name: c.name ?? "Hotel Found by Agent",
                         price: c.price,
                         booking_link: "#",
                         image_urls: [],
-                        rating: 4.5,
-                        description: "Recommended stay based on your constraints."
+                        rating: c.rating ?? 4.5,
+                        description: `${c.area ?? "Puri"} · ${(c.amenities ?? []).join(", ") || "Recommended stay based on your constraints."}`
                     }));
 
                     setPlan(prev => ({

@@ -3,7 +3,7 @@ import csv
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from services.api_fetcher import fetch_prices
+from services.api_fetcher import fetch_synthetic_prices
 from services.ml_service import price_ml_service
 
 
@@ -60,7 +60,7 @@ def build_synthetic_history(samples=500):
         }
 
         for poll_cycle in range(8):
-            components = fetch_prices(constraints, poll_cycle=poll_cycle)
+            components = fetch_synthetic_prices(constraints, poll_cycle=poll_cycle)
             history.append(_snapshot_for(trip_id, constraints, components))
 
     return history

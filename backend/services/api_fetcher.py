@@ -38,7 +38,8 @@ def _route_key(constraints):
     return constraints.get("destination") or constraints.get("route") or "default-route"
 
 
-def _demand_features(constraints, mode, now, poll_cycle=0):
+def build_price_features(constraints, mode, now=None, poll_cycle=0):
+    now = now or datetime.now(timezone.utc)
     days_to_departure = _days_to_departure(constraints, now)
     day_of_week = now.weekday()
     month = now.month
@@ -61,7 +62,7 @@ def _demand_features(constraints, mode, now, poll_cycle=0):
 
 
 def _synthetic_price(constraints, mode, now, poll_cycle=0):
-    features = _demand_features(constraints, mode, now, poll_cycle)
+    features = build_price_features(constraints, mode, now, poll_cycle)
     base_price = BASE_PRICES[mode]
     mode_multiplier = 1.0 if mode != "hotel" else 0.92
     trend = 1 + 0.025 * math.sin((poll_cycle + len(mode)) / 2)
@@ -97,7 +98,7 @@ def _component(constraints, mode, component_type, now, poll_cycle=0):
     }
 
 
-def fetch_prices(constraints, poll_cycle=0):
+def fetch_synthetic_prices(constraints, poll_cycle=0):
     now = datetime.now(timezone.utc)
     components = []
 
@@ -113,3 +114,9 @@ def fetch_prices(constraints, poll_cycle=0):
     components.append(_component(constraints, "hotel", "stay", now, poll_cycle))
 
     return components
+
+
+def fetch_prices(constraints, poll_cycle=0):
+    from services.mock_travel_data import fetch_puri_mock_prices
+
+    return fetch_puri_mock_prices(constraints, poll_cycle=poll_cycle)
