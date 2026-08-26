@@ -5,19 +5,13 @@ from services.ai_parser import parse_query_llm
 from services.constraint_service import create_constraints
 from services.scheduler import run_trip
 from services.contract_service import deploy_contract
-from store.db import TRIPS
+from store.db import PRICE_REPOSITORY, TRIPS
 import os
 #user_address = os.getenv("USER_ADDRESS") # if geeting issue in passing user address from request, you can set it here for testing
 
 router = APIRouter()
 from dotenv import load_dotenv
 load_dotenv()
-
-@router.get("/status/{trip_id}")
-async def get_trip_status(trip_id: str):
-    if trip_id not in TRIPS:
-        raise HTTPException(status_code=404, detail="Trip not found")
-    return TRIPS[trip_id]
 
 @router.post("/create_trip")
 async def create_trip(data: dict):
@@ -29,11 +23,7 @@ async def create_trip(data: dict):
         user_id = data["user_id"]
         query = data["query"]
         #user_address = data["user_address"] 
-        user_address = os.getenv("USER_ADDRESS")
-        if not user_address:
-            raise HTTPException(status_code=400, detail="Missing user_address (request or USER_ADDRESS env)")
-        booking_receiver_address = data.get("booking_receiver_address") or os.getenv("BOOKING_RECEIVER_ADDRESS") or user_address
-        print(f"User Address: {user_address}")
+        user_address = os.getenv("USER_ADDRESS") or data.get("user_address")
         #user_address = "DUmmt"
 
         # 🔹 Step 2: Parse using LLM
@@ -44,22 +34,9 @@ async def create_trip(data: dict):
 
         # 🔹 Step 4: Lock funds (blockchain stub)
         # contract = lock_funds(user_id, constraints["budget"])
-
-        contract = deploy_contract(
-            user_address=user_address,
-            budget=constraints["budget"],
-            trip_id=constraints["trip_id"],
-            receiver_address=booking_receiver_address,
-            deadline=constraints["deadline"],
-        )
+        
+        contract = deploy_contract(user_address) # this line is causing the internal server error
         #contract = {"app_id": 12345}
-
-        print(
-            "Trip created on-chain -> "
-            f"trip_id: {constraints['trip_id']}, app_id: {contract['app_id']}, "
-            f"app_address: {contract['app_address']}, create_tx_id: {contract['create_tx_id']}, "
-            f"lock_tx_id: {contract['lock_tx_id']}"
-        )
 
         # 🔹 Step 5: Store state
         TRIPS[constraints["trip_id"]] = {
@@ -67,14 +44,7 @@ async def create_trip(data: dict):
             "status": "ACTIVE",
             "contract": {
                 "app_id": contract["app_id"],
-                "app_address": contract["app_address"],
-                "create_tx_id": contract["create_tx_id"],
-                "lock_tx_id": contract["lock_tx_id"],
-                "lock_amount": contract["lock_amount"],
-                "user_address": user_address,
-                "receiver_address": contract["receiver_address"],
-                "itinerary_hash": None,
-                "itinerary_commit_tx_id": None,
+                "user_address": user_address
             }
         }
 
@@ -90,19 +60,34 @@ async def create_trip(data: dict):
             "parsed": parsed,  # useful for debugging
             "contract": {
                 "app_id": contract["app_id"],
-                "app_address": contract["app_address"],
-                "create_tx_id": contract["create_tx_id"],
-                "lock_tx_id": contract["lock_tx_id"],
-                "lock_amount": contract["lock_amount"],
-                "user_address": user_address,
-                "receiver_address": contract["receiver_address"],
-                "itinerary_hash": None,
-                "itinerary_commit_tx_id": None,
+                "user_address": user_address
             }
         }
 
-    except HTTPException:
-        raise
     except Exception as e:
         print("❌ Error in create_trip:", e)
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/status/{trip_id}")
+async def get_trip_status(trip_id: str):
+    trip = TRIPS.get(trip_id)
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    history = PRICE_REPOSITORY.get_history(trip_id)
+    latest_snapshot = history[-1] if history else {}
+
+    return {
+        "trip_id": trip_id,
+        "status": trip["status"],
+        "constraints": trip["constraints"],
+        "contract": trip.get("contract"),
+        "components": latest_snapshot.get("components", []),
+        "price_history": history,
+        "last_decision": trip.get("last_decision"),
+        "last_ml_prediction": trip.get("last_ml_prediction"),
+        "last_checked_at": trip.get("last_checked_at"),
+        "booking": trip.get("booking"),
+        "error": trip.get("error"),
+    }

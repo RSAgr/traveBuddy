@@ -1,50 +1,86 @@
 import asyncio
-from routes import trip
 from services.api_fetcher import fetch_prices
 from services.decision_engine import evaluate
+from services.ml_service import price_ml_service
 from services.booking_executor import execute_booking
-from store.db import PRICE_HISTORY, TRIPS
-from services.contract_service import build_itinerary_hash, commit_itinerary, release_funds
+from store.db import PRICE_REPOSITORY, TRIPS
+from services.contract_service import call_app
 from dotenv import load_dotenv
+from datetime import datetime, timezone
 load_dotenv()
 
 
+def _route_for(constraints):
+    return constraints.get("destination") or constraints.get("route") or "default-route"
+
+
+def _snapshot_for(trip_id, constraints, components):
+    total_cost = sum(c["price"] for c in components)
+    transport_modes = [c["mode"] for c in components if c["type"] == "transport"]
+    primary_component = next((c for c in components if c["type"] == "transport"), components[0])
+    features = primary_component.get("features", {})
+
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "trip_id": trip_id,
+        "route": _route_for(constraints),
+        "destination": constraints.get("destination", _route_for(constraints)),
+        "transport_type": "+".join(transport_modes) or primary_component["mode"],
+        "current_price": total_cost,
+        "days_to_departure": features.get("days_to_departure"),
+        "features": features,
+        "components": components,
+    }
+
+
 async def run_trip(trip_id):
-    PRICE_HISTORY[trip_id] = []
+    PRICE_REPOSITORY.clear_trip(trip_id)
 
-    while True:
-        await asyncio.sleep(1)  # slight delay to prevent tight loop on startup
-        trip = TRIPS[trip_id]
-        constraints = trip["constraints"]
+    try:
+        while True:
+            trip = TRIPS[trip_id]
+            constraints = trip["constraints"]
+            poll_cycle = len(PRICE_REPOSITORY.get_history(trip_id))
 
-        components = fetch_prices(constraints)
+            components = fetch_prices(constraints, poll_cycle=poll_cycle)
 
-        total_cost = sum(c["price"] for c in components)
-        PRICE_HISTORY[trip_id].append(total_cost)
+            snapshot = _snapshot_for(trip_id, constraints, components)
+            PRICE_REPOSITORY.save_snapshot(snapshot)
+            price_history = PRICE_REPOSITORY.get_history(trip_id)
+            ml_prediction = price_ml_service.predict_next_price(price_history)
 
-        decision = evaluate(constraints, components, PRICE_HISTORY[trip_id])
+            decision = evaluate(
+                constraints,
+                components,
+                price_history,
+                ml_prediction=ml_prediction,
+            )
+            trip["last_decision"] = decision
+            trip["last_ml_prediction"] = ml_prediction
+            trip["last_checked_at"] = datetime.now(timezone.utc).isoformat()
 
-        trip = TRIPS[trip_id]
-        trip["components"] = components
-        constraints = trip["constraints"]
-        app_id = trip["contract"]["app_id"]
-        user_address = trip["contract"]["user_address"]
-        
-        if decision["decision"] == "EXECUTE":
-            booking_success = execute_booking(trip_id, components)
-            if booking_success:
-                itinerary_hash = build_itinerary_hash(trip_id, constraints, components)
-                commit_tx_id = commit_itinerary(app_id, user_address, itinerary_hash)
-                release_tx_id = release_funds(app_id, user_address)
+            app_id = trip["contract"]["app_id"]
+            user_address = trip["contract"]["user_address"]
+
+            if decision["decision"] == "BOOK":
+                call_app(app_id, user_address, [b"approve"])
+                selected_components = decision.get("selected_components") or components
+                execute_booking(trip_id, selected_components)
                 trip["status"] = "BOOKED"
-                trip["contract"]["itinerary_hash"] = itinerary_hash
-                trip["contract"]["itinerary_commit_tx_id"] = commit_tx_id
-                trip["contract"]["release_tx_id"] = release_tx_id
-                print(
-                    "On-chain itinerary commitment complete -> "
-                    f"trip_id: {trip_id}, app_id: {app_id}, itinerary_hash: {itinerary_hash}, "
-                    f"commit_tx_id: {commit_tx_id}, release_tx_id: {release_tx_id}"
-                )
+                trip["booking"] = {
+                    "components": selected_components,
+                    "cost": decision.get("cost"),
+                    "decision": decision,
+                    "ml_prediction": ml_prediction,
+                    "executed_at": datetime.now(timezone.utc).isoformat(),
+                }
                 break
 
-        await asyncio.sleep(8)  # polling interval
+            await asyncio.sleep(5)  # polling interval
+    except Exception as exc:
+        trip = TRIPS.get(trip_id)
+        if trip is not None:
+            trip["status"] = "FAILED"
+            trip["error"] = str(exc)
+            trip["failed_at"] = datetime.now(timezone.utc).isoformat()
+        print(f"Trip monitor failed for {trip_id}: {exc}")

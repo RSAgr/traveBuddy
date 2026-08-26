@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
+
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
@@ -17,7 +19,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/api/proxy/:path*",
-        destination: "https://travebuddy.onrender.com/:path*",
+        destination: `${backendUrl}/:path*`,
       },
     ];
   },

@@ -4,3 +4,6 @@ fastapi
 google-generativeai
 dotenv
 pyteal
+aiokafka
+joblib
+scikit-learn

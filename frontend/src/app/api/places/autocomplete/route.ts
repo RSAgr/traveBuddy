@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getCachedAutocomplete, setCachedAutocomplete } from "@/lib/redis";
 
 /**
  * POST /api/places/autocomplete
@@ -32,6 +33,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ predictions: [] });
     }
 
+    const cachedResponse = await getCachedAutocomplete(input);
+    if (cachedResponse) {
+        return NextResponse.json(cachedResponse);
+    }
+
     const url = new URL(
         "https://maps.googleapis.com/maps/api/place/autocomplete/json",
     );
@@ -61,6 +67,8 @@ export async function POST(req: NextRequest) {
                 place_id: p.place_id,
             }),
         );
+
+        await setCachedAutocomplete(input, { predictions });
 
         return NextResponse.json({ predictions });
     } catch (e) {

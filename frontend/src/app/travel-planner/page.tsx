@@ -31,35 +31,6 @@ export default function Dashboard() {
     const alreadyBookedRef = useRef(false);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Make proxy / backend request to start trip
-    const startTrip = useCallback(async (prompt: string, address: string = "dummy") => {
-        setIsPolling(true);
-        setFunctionCalls(["Agent Analyzing Request..."]);
-        alreadyBookedRef.current = false;
-        
-        try {
-            const res = await fetch("/api/proxy/create_trip", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ user_id: "user123", query: prompt, user_address: address }),
-            });
-            const data = await res.json();
-            if (data.trip_id) {
-                setTripId(data.trip_id);
-                setFunctionCalls(["Evaluating Flight/Hotel Options..."]);
-                pollTrip(data.trip_id);
-            } else {
-                addMessage({ role: "assistant", text: "Failed to initialize trip with agent." });
-                setIsPolling(false);
-                setFunctionCalls([]);
-            }
-        } catch (e) {
-            console.error(e);
-            setIsPolling(false);
-            setFunctionCalls([]);
-        }
-    }, [addMessage, setTripId]);
-
     // Polling loop
     const pollTrip = useCallback(async (currentTripId: string) => {
         if (pollingIntervalRef.current) {
@@ -70,6 +41,13 @@ export default function Dashboard() {
                 const res = await fetch(`/api/proxy/status/${currentTripId}`);
                 if (!res.ok) return;
                 const data = await res.json();
+
+                if (data.last_decision) {
+                    const confidence = Math.round((data.last_decision.confidence ?? 0) * 100);
+                    setFunctionCalls([
+                        `${data.last_decision.decision}: ${data.last_decision.reason} (${confidence}% confidence)`
+                    ]);
+                }
                 
                 // data = { status, components, constraints, contract }
                 if (data.components) {
@@ -106,7 +84,12 @@ export default function Dashboard() {
                     }));
                 }
 
-                if (data.status === "BOOKED" && !alreadyBookedRef.current) {
+                if (data.status === "FAILED") {
+                    setIsPolling(false);
+                    setFunctionCalls([]);
+                    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+                    addMessage({ role: "assistant", text: `Trip monitoring failed: ${data.error ?? "Unknown backend error"}` });
+                } else if (data.status === "BOOKED" && !alreadyBookedRef.current) {
                     alreadyBookedRef.current = true;
                     setIsPolling(false);
                     setFunctionCalls([]);
@@ -137,6 +120,42 @@ export default function Dashboard() {
             }
         }, 5000);
     }, [setPlan, addMessage]);
+
+    // Make proxy / backend request to start trip
+    const startTrip = useCallback(async (prompt: string, address: string = "dummy") => {
+        setIsPolling(true);
+        setFunctionCalls(["Agent Analyzing Request..."]);
+        alreadyBookedRef.current = false;
+
+        try {
+            const res = await fetch("/api/proxy/create_trip", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ user_id: "user123", query: prompt, user_address: address }),
+            });
+            if (!res.ok) {
+                const message = await res.text();
+                addMessage({ role: "assistant", text: `Failed to initialize trip: ${message}` });
+                setIsPolling(false);
+                setFunctionCalls([]);
+                return;
+            }
+            const data = await res.json();
+            if (data.trip_id) {
+                setTripId(data.trip_id);
+                setFunctionCalls(["Evaluating Flight/Hotel Options..."]);
+                pollTrip(data.trip_id);
+            } else {
+                addMessage({ role: "assistant", text: "Failed to initialize trip with agent." });
+                setIsPolling(false);
+                setFunctionCalls([]);
+            }
+        } catch (e) {
+            console.error(e);
+            setIsPolling(false);
+            setFunctionCalls([]);
+        }
+    }, [addMessage, setTripId, pollTrip]);
 
     /* ── Initial prompt on mount ── */
     useEffect(() => {

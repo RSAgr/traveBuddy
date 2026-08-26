@@ -4,7 +4,7 @@
 #         "destination": "Goa",
 #         "budget": 10000,
 #         "deadline": 1716144000,
-#         "transport_modes": ["cab", "train"]
+#         "transport_modes": ["flight", "train"]
 #     }
 
 import json
@@ -21,10 +21,8 @@ Return ONLY valid JSON in this format:
   "destination": string,
   "budget": integer,
   "deadline_days_from_now": integer,
-  "transport_modes": list of ["cab", "train", "bus"]
+  "transport_modes": list of ["flight", "train", "bus"]
 }}
-
-If any field is missing or unclear, do write a best guess or use defaults
 
 Rules:
 - If transport not specified → include all
@@ -60,8 +58,6 @@ def extract_json(text: str):
 load_dotenv()
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-print("Gemini API Key loaded:", os.getenv("GEMINI_API_KEY"))
-
 
 model = genai.GenerativeModel("gemini-2.5-flash")
 
@@ -83,16 +79,16 @@ def parse_query_llm(query: str):
         # 🔹 Step 3: Validate + defaults
         destination = data.get("destination", "Unknown")
 
-        budget = int(data.get("budget", 1000))
+        budget = int(data.get("budget", 10000))
 
         days = int(data.get("deadline_days_from_now", 7))
         deadline = datetime.now() + timedelta(days=days)
 
-        transport_modes = data.get("transport_modes", ["cab", "train", "bus"])
+        transport_modes = data.get("transport_modes", ["flight", "train", "bus"])
 
         # Ensure it's a list
         if not isinstance(transport_modes, list):
-            transport_modes = ["cab", "train", "bus"]
+            transport_modes = ["flight", "train", "bus"]
 
         return {
             "destination": destination,
@@ -105,10 +101,10 @@ def parse_query_llm(query: str):
         print("❌ LLM parsing failed:", e)
         print("Raw response:", raw_text)
 
-        # Strong fallback
+        # 🔹 Strong fallback
         return {
-            "destination": "Nowhere",
-            "budget": 1000,
+            "destination": "Goa",
+            "budget": 10000,
             "deadline": int((datetime.now() + timedelta(days=7)).timestamp()),
-            "transport_modes": ["cab", "train"]
+            "transport_modes": ["flight", "train"]
         }
