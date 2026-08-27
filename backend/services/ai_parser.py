@@ -57,6 +57,9 @@ def extract_json(text: str):
 load_dotenv()
 
 def parse_query_llm(query: str):
+    if os.getenv("MOCK_TRAVEL_DATA_ENABLED", "true").lower() == "true":
+        raise ValueError("MOCK_TRAVEL_DATA_ENABLED is true")
+
     if not os.getenv("GEMINI_API_KEY"):
         raise ValueError("GEMINI_API_KEY is not configured")
 

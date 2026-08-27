@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
+from services.itinerary_builder import build_booking_itinerary
 
 
 load_dotenv()
@@ -100,6 +101,9 @@ def _fallback_decision(best_cost, budget, ml_signal, days_until_deadline):
 
 
 def _llm_decision(constraints, components, price_history, ml_signal, best_cost, days_until_deadline):
+    if os.getenv("MOCK_TRAVEL_DATA_ENABLED", "true").lower() == "true":
+        return _fallback_decision(best_cost, constraints["budget"], ml_signal, days_until_deadline)
+
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return _fallback_decision(best_cost, constraints["budget"], ml_signal, days_until_deadline)
@@ -145,7 +149,18 @@ ML signal: {json.dumps(ml_signal, default=str)}
     }
 
 
-def _validate_decision(llm_decision, constraints, best_combo, best_cost):
+def _with_itinerary(decision, constraints, components):
+    selected_components = decision.get("selected_components")
+    if selected_components:
+        decision["itinerary"] = build_booking_itinerary(
+            constraints,
+            selected_components,
+            components,
+        )
+    return decision
+
+
+def _validate_decision(llm_decision, constraints, components, best_combo, best_cost):
     hard_failures = []
     allowed_modes = set(constraints.get("transport_modes", []))
     selected_modes = {
@@ -164,7 +179,7 @@ def _validate_decision(llm_decision, constraints, best_combo, best_cost):
         hard_failures.append("Selected transport violates mandatory transport preferences.")
 
     if llm_decision.get("requires_human_approval"):
-        return {
+        return _with_itinerary({
             **llm_decision,
             "decision": WAIT,
             "reason": f"Human approval required before booking: {llm_decision['reason']}",
@@ -172,10 +187,10 @@ def _validate_decision(llm_decision, constraints, best_combo, best_cost):
             "hard_constraint_failures": hard_failures,
             "selected_components": best_combo,
             "cost": best_cost,
-        }
+        }, constraints, components)
 
     if llm_decision["decision"] == BOOK and hard_failures:
-        return {
+        return _with_itinerary({
             "decision": WAIT,
             "reason": "LLM recommended booking, but deterministic hard constraints failed: "
             + "; ".join(hard_failures),
@@ -185,15 +200,15 @@ def _validate_decision(llm_decision, constraints, best_combo, best_cost):
             "hard_constraint_failures": hard_failures,
             "selected_components": best_combo,
             "cost": best_cost,
-        }
+        }, constraints, components)
 
-    return {
+    return _with_itinerary({
         **llm_decision,
         "validated": True,
         "hard_constraint_failures": hard_failures,
         "selected_components": best_combo,
         "cost": best_cost,
-    }
+    }, constraints, components)
 
 
 def evaluate(constraints, components, price_history, ml_prediction=None):
@@ -222,4 +237,4 @@ def evaluate(constraints, components, price_history, ml_prediction=None):
         decision = _fallback_decision(best_cost, constraints["budget"], ml_signal, days_until_deadline)
         decision["reason"] = f"{decision['reason']} LLM unavailable: {exc}"
 
-    return _validate_decision(decision, constraints, best_combo, best_cost)
+    return _validate_decision(decision, constraints, components, best_combo, best_cost)

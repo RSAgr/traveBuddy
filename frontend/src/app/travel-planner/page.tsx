@@ -14,6 +14,26 @@ type DecisionSummary = {
     reason: string;
     confidence: number;
     cost?: number;
+    itinerary?: {
+        route: string;
+        start_date: string;
+        checkout_date: string;
+        nights: number;
+        estimated_total: number;
+        timeline: Array<{
+            title: string;
+            date: string;
+            time: string;
+            details: string[];
+            booking_required: boolean;
+        }>;
+        bookable_public_places: Array<{
+            name: string;
+            booking_option?: string;
+            price?: number;
+            estimated_cost?: number;
+        }>;
+    };
     selected_components?: Array<{
         type: string;
         mode: string;
@@ -338,6 +358,57 @@ export default function Dashboard() {
                                     <p className="text-sm font-semibold text-[#FF5A1F] mt-2">
                                         Selected total: ₹{Number(decisionSummary.cost).toLocaleString("en-IN")}
                                     </p>
+                                )}
+                                {decisionSummary.itinerary && (
+                                    <div className="mt-4 space-y-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <div className="rounded-lg bg-gray-50 dark:bg-gray-800 p-3">
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">Route</p>
+                                                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{decisionSummary.itinerary.route}</p>
+                                            </div>
+                                            <div className="rounded-lg bg-gray-50 dark:bg-gray-800 p-3">
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">Stay</p>
+                                                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{decisionSummary.itinerary.nights} night(s)</p>
+                                            </div>
+                                            <div className="rounded-lg bg-gray-50 dark:bg-gray-800 p-3">
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">Checkout</p>
+                                                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{decisionSummary.itinerary.checkout_date}</p>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Booking Timeline</h3>
+                                            <div className="space-y-2">
+                                                {decisionSummary.itinerary.timeline.map((item, index) => (
+                                                    <div key={index} className="rounded-lg border border-gray-100 dark:border-gray-800 p-3">
+                                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                                            <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{item.title}</p>
+                                                            <span className="text-xs text-gray-500 dark:text-gray-400">{item.date} · {item.time}</span>
+                                                        </div>
+                                                        <ul className="mt-2 space-y-1">
+                                                            {item.details.map((detail, detailIndex) => (
+                                                                <li key={detailIndex} className="text-xs text-gray-600 dark:text-gray-300">{detail}</li>
+                                                            ))}
+                                                        </ul>
+                                                        {item.booking_required && (
+                                                            <span className="inline-flex mt-2 px-2 py-1 rounded-full text-xs bg-[#FF5A1F]/10 text-[#FF5A1F]">Booking slot needed</span>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        {decisionSummary.itinerary.bookable_public_places.length > 0 && (
+                                            <div>
+                                                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Public Place Booking Options</h3>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {decisionSummary.itinerary.bookable_public_places.map((place, index) => (
+                                                        <span key={index} className="px-3 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
+                                                            {place.name}: {place.booking_option ?? "Reservation available"}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                                 {decisionSummary.selected_components && (
                                     <div className="flex flex-wrap gap-2 mt-3">

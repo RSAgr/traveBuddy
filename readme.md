@@ -35,19 +35,31 @@ Algorand blockchain integration ensures transparency and security:
 - **app_id**: The Algorand application ID; this is the main on-chain identifier you use to look up the trip contract
 - **app_address**: The escrow-style application account address that receives locked funds
 
-### Real-Time Price Monitoring
+### Real-Time Price Monitoring & ML-Ready Data
 
 Our decision engine continuously monitors prices and executes bookings at optimal times:
-- Tracks price history across multiple providers
-- Uses trend analysis to predict booking windows
-- Executes transactions automatically when conditions are optimal
+- Stores structured price snapshots with route, transport type, timestamp, days-to-departure, demand, seasonality, and current price
+- Uses deterministic synthetic/mock price dynamics so trends are learnable during development
+- Runs an ML service abstraction that can consume accumulated history and return prediction, trend, and confidence signals
+- Sends ML output into the LLM decision agent, then validates every booking decision with deterministic policy checks
+- Preserves a strict WAIT/BOOK workflow so the LLM recommends actions but never directly controls payments or blockchain execution
 - Keeps you informed of all decisions and actions
+
+### Complete Itinerary Planning
+
+TraveBuddy now plans beyond a single ticket:
+- Evaluates transport, hotels, restaurants, and key public-place booking options
+- Builds a timeline with boarding, departure, arrival, hotel check-in/check-out, meals, and destination activities
+- Shows the selected booking combo separately from candidate options
+- Uses mock Ranchi to Puri data for local demos, with synthetic fallback for other destinations
 
 ## Technology Stack
 
 ### Backend
 - **Runtime**: Python with FastAPI
-- **AI & Parsing**: Google Generative AI for natural language processing
+- **AI & Parsing**: Google Generative AI fallback plus deterministic local parsing in mock mode
+- **Orchestration**: LangGraph for stateful trip planning, clarification loops, tool routing, ML prediction, and decision validation
+- **ML Pipeline**: scikit-learn price prediction service with offline synthetic-data training support
 - **Blockchain**: Algorand (py-algorand-sdk, PyTeal for smart contracts)
 - **Async Processing**: asyncio for non-blocking job scheduling
 - **Smart Contract Language**: PyTeal for contract logic
@@ -65,10 +77,16 @@ Our decision engine continuously monitors prices and executes bookings at optima
 The backend follows a service-oriented architecture with clear separation of concerns:
 
 - **ai_parser.py**: Parses user travel requirements into structured constraints using LLM
+- **langgraph_orchestrator.py**: Maintains conversation state, asks clarifying questions, chooses search tools, and coordinates ML/decision/booking flow
+- **search_tools.py**: Exposes transport and hotel search tools to the orchestration layer
 - **constraint_service.py**: Normalizes and validates trip constraints
 - **scheduler.py**: Async monitoring loop that triggers booking decisions at optimal times
-- **decision_engine.py**: Determines when to execute bookings based on price trends
-- **api_fetcher.py**: Aggregates prices from partner APIs in real-time
+- **decision_engine.py**: LLM decision agent plus deterministic policy validation for BOOK/WAIT decisions
+- **ml_service.py**: ML abstraction for price prediction, trend, and confidence signals
+- **price_snapshots.py**: Converts current component prices into ML-ready snapshot records
+- **api_fetcher.py**: Fetches mock/synthetic price components while keeping a provider-normalized interface
+- **mock_travel_data.py**: Local Ranchi to Puri catalog for flights, trains, buses, hotels, restaurants, and public-place activities
+- **itinerary_builder.py**: Builds a complete selected itinerary and user-facing timeline
 - **booking_executor.py**: Executes bookings through partner integrations
 - **contract_service.py**: Deploys and manages smart contracts for fund protection
 - **algorand_client.py**: Client for Algorand blockchain interaction
@@ -83,7 +101,7 @@ At the heart of TraveBuddy's trust model is the Algorand blockchain:
 
 2. **Booking Monitoring**: Our decision engine monitors prices and travel availability in real-time.
 
-3. **Automated Execution**: Once price and availability conditions are met, a booking is executed through partner APIs.
+3. **Automated Execution**: Once price, availability, and deterministic policy checks pass, a booking is executed through provider integrations or the local mock executor.
 
 4. **On-Chain Commitment**: TraveBuddy commits a SHA-256 itinerary hash (trip id + normalized constraints + selected components) on Algorand.
 
@@ -99,8 +117,8 @@ This design eliminates the need to trust TraveBuddy—you only trust the immutab
 
 - Python 3.8+
 - Node.js 18+
-- Algorand node access (testnet or local node)
-- API keys for travel providers
+- Algorand node access for real contract deployment, or mock mode for local demos
+- Optional API keys for LLM/maps integrations
 
 ### Installation
 
@@ -128,7 +146,13 @@ This design eliminates the need to trust TraveBuddy—you only trust the immutab
    MOCK_TRAVEL_DATA_ENABLED=true
    ```
 
-   The local development price pipeline uses rich mock data for Ranchi to Puri, including flights, trains, buses, hotels, restaurants, and activities. Synthetic generation remains available as a fallback for other destinations.
+   For easiest local development, set:
+   ```
+   MOCK_TRAVEL_DATA_ENABLED=true
+   MOCK_CONTRACT_ENABLED=true
+   ```
+
+   Mock mode avoids external travel APIs and blockchain writes. The local development price pipeline uses rich mock data for Ranchi to Puri, including flights, trains, buses, hotels, restaurants, and activities. Synthetic generation remains available as a fallback for other destinations.
 
    Create a `.env.local` file in the frontend directory with:
    ```
@@ -139,6 +163,13 @@ This design eliminates the need to trust TraveBuddy—you only trust the immutab
    ```bash
    cd frontend
    npm install
+   ```
+
+5. Optional: train the offline price model from synthetic data:
+   ```bash
+   cd backend
+   python generate_synthetic_price_data.py
+   python train_price_model.py
    ```
 
 ### Running Locally
@@ -160,15 +191,30 @@ This design eliminates the need to trust TraveBuddy—you only trust the immutab
 ## How It Works
 
 1. **User Input**: You describe your travel plans through natural conversation
-2. **Constraint Parsing**: AI extracts structured trip requirements (destination, budget, dates, transport)
-3. **Fund Locking**: Your budget is locked in a smart contract on Algorand
-4. **Continuous Monitoring**: Scheduler monitors prices 24/7
-5. **Optimal Booking**: Decision engine executes booking when conditions are ideal
-6. **Itinerary Commitment**: Backend writes itinerary hash on-chain before payout
-7. **Contract Verification**: Smart contract validates commitment state before releasing funds
-8. **Fund Transfer**: Funds are released only after verification succeeds
+2. **Stateful Orchestration**: LangGraph stores trip state, updates constraints, and asks clarification questions when dates, flexibility, budget, or preferences are incomplete
+3. **Tool Routing**: The graph dynamically calls only the needed search tools for flights, trains, buses, hotels, restaurants, and activities
+4. **Price Snapshot Storage**: Each polling cycle stores structured observations in the in-memory price repository
+5. **ML Prediction**: The ML service receives accumulated history and returns predicted price, trend, and confidence
+6. **Decision Agent**: The LLM decision engine reviews user constraints, current prices, history, ML output, budget, and deadline pressure
+7. **Policy Validation**: A deterministic gate allows BOOK only when the LLM recommends it and all hard constraints pass
+8. **Human Approval**: If required, the workflow pauses until the user confirms
+9. **Booking Execution**: The selected itinerary is booked through the existing booking executor
+10. **Itinerary Commitment**: Backend writes itinerary hash on-chain before payout
+11. **Contract Verification**: Smart contract validates commitment state before releasing funds
+12. **Fund Transfer**: Funds are released only after verification succeeds
 
 When you create a trip, the backend prints the `trip_id`, `app_id`, `app_address`, `create_tx_id`, and `lock_tx_id` to the terminal so you can trace the trip on Algorand.
+
+## Local Demo Scenario
+
+The most complete mock dataset currently targets:
+- **Origin**: Ranchi, Jharkhand, India
+- **Destination**: Puri, Odisha, India
+- **Transport**: flights to Bhubaneswar with Puri transfer, direct trains, and buses
+- **Stay**: multiple Puri hotels with check-in/check-out and amenities
+- **Itinerary**: restaurants, beach/cultural activities, and public-place booking options
+
+Try planning a trip from Ranchi to Puri with a budget and travel dates. The UI will show candidate options, the selected combo, total cost, and a timeline for the complete itinerary.
 
 ## Why Algorand?
 

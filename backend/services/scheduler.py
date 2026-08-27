@@ -5,6 +5,7 @@ from store.db import PRICE_REPOSITORY, TRIPS
 from services.contract_service import call_app
 from dotenv import load_dotenv
 from datetime import datetime, timezone
+import os
 load_dotenv()
 
 
@@ -37,7 +38,8 @@ async def run_trip(trip_id):
             user_address = trip["contract"]["user_address"]
 
             if decision["decision"] == "BOOK":
-                call_app(app_id, user_address, [b"approve"])
+                if os.getenv("MOCK_TRAVEL_DATA_ENABLED", "true").lower() != "true":
+                    call_app(app_id, user_address, [b"approve"])
                 selected_components = decision.get("selected_components") or components
                 execute_booking(trip_id, selected_components)
                 trip["status"] = "BOOKED"

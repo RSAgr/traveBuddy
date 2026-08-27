@@ -16,6 +16,13 @@ router = APIRouter()
 
 
 def _contract_for(user_address):
+    if os.getenv("MOCK_TRAVEL_DATA_ENABLED", "true").lower() == "true":
+        return {
+            "app_id": "mock-app",
+            "user_address": user_address or "mock-user",
+            "tx_id": "mock-create-tx",
+        }
+
     contract = deploy_contract(user_address)
     return {
         "app_id": contract["app_id"],

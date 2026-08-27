@@ -58,6 +58,9 @@ def _extract_json(text):
 
 def _llm_json(prompt, fallback):
     global LLM_DISABLED_FOR_SESSION
+    if os.getenv("MOCK_TRAVEL_DATA_ENABLED", "true").lower() == "true":
+        return fallback
+
     if LLM_DISABLED_FOR_SESSION:
         return fallback
 
@@ -203,6 +206,13 @@ def clarify_constraints(state: TravelGraphState):
             "status": "NEEDS_CLARIFICATION",
             "needs_clarification": True,
             "clarification_question": f"Please share your {', '.join(missing)} for the Ranchi to Puri trip.",
+        }
+
+    if os.getenv("MOCK_TRAVEL_DATA_ENABLED", "true").lower() == "true":
+        return {
+            "status": "READY_TO_SEARCH",
+            "needs_clarification": False,
+            "clarification_question": None,
         }
 
     prompt = f"""
