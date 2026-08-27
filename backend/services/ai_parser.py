@@ -41,7 +41,6 @@ User Query:
 import json
 import re
 from datetime import datetime, timedelta
-import google.generativeai as genai
 import os
 from dotenv import load_dotenv
 
@@ -57,11 +56,14 @@ def extract_json(text: str):
 
 load_dotenv()
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-model = genai.GenerativeModel("gemini-2.5-flash")
-
 def parse_query_llm(query: str):
+    if not os.getenv("GEMINI_API_KEY"):
+        raise ValueError("GEMINI_API_KEY is not configured")
+
+    import google.generativeai as genai
+
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+    model = genai.GenerativeModel("gemini-2.5-flash")
     prompt = build_prompt(query)
 
     response = model.generate_content(prompt)
@@ -77,14 +79,16 @@ def parse_query_llm(query: str):
         data = json.loads(json_str)
 
         # 🔹 Step 3: Validate + defaults
-        destination = data.get("destination", "Unknown")
+        destination = data.get("destination") or "Puri"
 
-        budget = int(data.get("budget", 10000))
+        budget = int(data.get("budget") or 10000)
 
-        days = int(data.get("deadline_days_from_now", 7))
+        days = int(data.get("deadline_days_from_now") or 7)
+        if days < 0 or days > 366:
+            days = 7
         deadline = datetime.now() + timedelta(days=days)
 
-        transport_modes = data.get("transport_modes", ["flight", "train", "bus"])
+        transport_modes = data.get("transport_modes") or ["flight", "train", "bus"]
 
         # Ensure it's a list
         if not isinstance(transport_modes, list):

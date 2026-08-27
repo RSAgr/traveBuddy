@@ -7,7 +7,21 @@ import { tripInputSummary, tripInputToPrompt } from "@/components/travel-planner
 import TransportSection from "@/components/travel-planner/sections/TransportSection";
 import HotelSection from "@/components/travel-planner/sections/HotelSection";
 import MessageThread from "@/components/travel-planner/sections/MessageThread";
-import { Send } from "lucide-react";
+import { CheckCircle2, Send } from "lucide-react";
+
+type DecisionSummary = {
+    decision: string;
+    reason: string;
+    confidence: number;
+    cost?: number;
+    selected_components?: Array<{
+        type: string;
+        mode: string;
+        name?: string;
+        price: number;
+        operator?: string;
+    }>;
+};
 
 export default function Dashboard() {
     const router = useRouter();
@@ -27,6 +41,7 @@ export default function Dashboard() {
     const [input, setInput] = useState("");
     const [isPolling, setIsPolling] = useState(false);
     const [functionCalls, setFunctionCalls] = useState<string[]>([]);
+    const [decisionSummary, setDecisionSummary] = useState<DecisionSummary | null>(null);
     const hasInitiated = useRef(false);
     const alreadyBookedRef = useRef(false);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -39,11 +54,20 @@ export default function Dashboard() {
         pollingIntervalRef.current = setInterval(async () => {
             try {
                 const res = await fetch(`/api/proxy/status/${currentTripId}`);
+                if (res.status === 404) {
+                    setIsPolling(false);
+                    setFunctionCalls([]);
+                    setTripId(null);
+                    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+                    addMessage({ role: "assistant", text: "That trip session expired after the backend restarted. Please use Re-plan to start a fresh trip." });
+                    return;
+                }
                 if (!res.ok) return;
                 const data = await res.json();
 
                 if (data.last_decision) {
                     const confidence = Math.round((data.last_decision.confidence ?? 0) * 100);
+                    setDecisionSummary(data.last_decision);
                     setFunctionCalls([
                         `${data.last_decision.decision}: ${data.last_decision.reason} (${confidence}% confidence)`
                     ]);
@@ -84,7 +108,17 @@ export default function Dashboard() {
                     }));
                 }
 
-                if (data.status === "FAILED") {
+                if (data.status === "NEEDS_CLARIFICATION") {
+                    setIsPolling(false);
+                    setFunctionCalls([]);
+                    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+                    addMessage({ role: "assistant", text: data.clarification_question ?? "I need a little more detail before searching." });
+                } else if (data.status === "AWAITING_HUMAN_APPROVAL") {
+                    setIsPolling(false);
+                    setFunctionCalls([]);
+                    if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
+                    addMessage({ role: "assistant", text: data.human_approval_request?.reason ?? "Please approve before I book this option." });
+                } else if (data.status === "FAILED") {
                     setIsPolling(false);
                     setFunctionCalls([]);
                     if (pollingIntervalRef.current) clearInterval(pollingIntervalRef.current);
@@ -119,7 +153,7 @@ export default function Dashboard() {
                 console.error("Polling error", e);
             }
         }, 5000);
-    }, [setPlan, addMessage]);
+    }, [setPlan, addMessage, setTripId]);
 
     // Make proxy / backend request to start trip
     const startTrip = useCallback(async (prompt: string, address: string = "dummy") => {
@@ -143,6 +177,12 @@ export default function Dashboard() {
             const data = await res.json();
             if (data.trip_id) {
                 setTripId(data.trip_id);
+                if (data.clarification_question) {
+                    addMessage({ role: "assistant", text: data.clarification_question });
+                    setIsPolling(false);
+                    setFunctionCalls([]);
+                    return;
+                }
                 setFunctionCalls(["Evaluating Flight/Hotel Options..."]);
                 pollTrip(data.trip_id);
             } else {
@@ -187,13 +227,54 @@ export default function Dashboard() {
         }
     }, [isPolling, ready, tripInput, saveSession]);
 
-    function handleSend(text: string) {
+    async function handleSend(text: string) {
         if (!text.trim() || isPolling) return;
-        addMessage({ role: "user", text: text.trim() });
-        // The backend doesn't support chat updates yet!
-        // We will just echo it for now.
-        addMessage({ role: "assistant", text: "I'm sorry, I cannot update the trip dynamically yet." });
+        const message = text.trim();
+        addMessage({ role: "user", text: message });
         setInput("");
+        if (!tripId) {
+            addMessage({ role: "assistant", text: "Please start a trip first." });
+            return;
+        }
+
+        setIsPolling(true);
+        setFunctionCalls(["Updating trip constraints..."]);
+        try {
+            const res = await fetch(`/api/proxy/trip/${tripId}/message`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    message,
+                    approved: /\b(yes|approve|book|confirm|go ahead)\b/i.test(message),
+                }),
+            });
+            if (!res.ok) {
+                const error = await res.text();
+                addMessage({ role: "assistant", text: `I could not update the trip: ${error}` });
+                setIsPolling(false);
+                setFunctionCalls([]);
+                return;
+            }
+            const data = await res.json();
+            if (data.clarification_question) {
+                addMessage({ role: "assistant", text: data.clarification_question });
+                setIsPolling(false);
+                setFunctionCalls([]);
+                return;
+            }
+            if (data.human_approval_request) {
+                addMessage({ role: "assistant", text: data.human_approval_request.reason });
+                setIsPolling(false);
+                setFunctionCalls([]);
+                return;
+            }
+            pollTrip(tripId);
+        } catch (e) {
+            console.error(e);
+            addMessage({ role: "assistant", text: "I could not update the trip. Please try again." });
+            setIsPolling(false);
+            setFunctionCalls([]);
+        }
     }
 
     const hasOutbound = (plan.outbound.cabs?.length ?? 0) > 0 || (plan.outbound.trains?.length ?? 0) > 0;
@@ -242,7 +323,39 @@ export default function Dashboard() {
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
                 <MessageThread messages={messages} isStreaming={isPolling} />
-                {hasOutbound && <TransportSection title="🛫 Evaluating Transport Options" transports={plan.outbound} />}
+                {decisionSummary && (
+                    <section className="tp-section border border-gray-200 dark:border-gray-800 rounded-xl p-4 bg-white dark:bg-gray-900">
+                        <div className="flex items-start gap-3">
+                            <CheckCircle2 className="w-5 h-5 text-[#FF5A1F] mt-0.5" />
+                            <div className="min-w-0">
+                                <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                                    Decision Engine Recommendation
+                                </h2>
+                                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                                    {decisionSummary.decision === "BOOK" ? "Selected combo ready for booking" : "Still evaluating options"} · {Math.round((decisionSummary.confidence ?? 0) * 100)}% confidence
+                                </p>
+                                {decisionSummary.cost != null && (
+                                    <p className="text-sm font-semibold text-[#FF5A1F] mt-2">
+                                        Selected total: ₹{Number(decisionSummary.cost).toLocaleString("en-IN")}
+                                    </p>
+                                )}
+                                {decisionSummary.selected_components && (
+                                    <div className="flex flex-wrap gap-2 mt-3">
+                                        {decisionSummary.selected_components.map((component, index) => (
+                                            <span key={index} className="px-3 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200">
+                                                {component.type === "stay" ? "Hotel" : component.mode}: {component.name ?? component.operator ?? "Selected option"} · ₹{Number(component.price).toLocaleString("en-IN")}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
+                                    The lists below are candidates. Only this selected combo is used when booking executes.
+                                </p>
+                            </div>
+                        </div>
+                    </section>
+                )}
+                {hasOutbound && <TransportSection title="Transport Candidates" transports={plan.outbound} />}
                 {hasHotels && <HotelSection hotels={plan.hotels} />}
             </div>
 

@@ -119,7 +119,7 @@ function HotelCard({ h }: { h: HotelDetails }) {
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
                 >
-                    Book <ExternalLink className="w-3 h-3" />
+                    View option <ExternalLink className="w-3 h-3" />
                 </a>
             </div>
         </div>

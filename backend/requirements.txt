@@ -7,3 +7,4 @@ pyteal
 aiokafka
 joblib
 scikit-learn
+langgraph

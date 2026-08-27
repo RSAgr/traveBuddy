@@ -82,16 +82,18 @@ def _fallback_decision(best_cost, budget, ml_signal, days_until_deadline):
     predicted_price = ml_signal.get("predicted_next_price")
     current_price = ml_signal.get("current_price")
     near_deadline = days_until_deadline is not None and days_until_deadline <= 2
-    should_book = near_deadline or (
+    predicted_rising = (
         predicted_price is not None
         and current_price is not None
         and predicted_price > current_price
         and ml_signal.get("confidence", 0) >= 0.45
     )
+    well_under_budget = best_cost <= budget * 0.9
+    should_book = near_deadline or predicted_rising or well_under_budget
 
     return {
         "decision": BOOK if should_book else WAIT,
-        "reason": "Fallback decision based on budget, deadline, and ML price trend.",
+        "reason": "Fallback decision based on budget fit, deadline, and ML price trend.",
         "confidence": 0.55,
         "requires_human_approval": False,
     }

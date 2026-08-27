@@ -1,72 +1,105 @@
-from fastapi import APIRouter, HTTPException
 import asyncio
-
-from services.ai_parser import parse_query_llm
-from services.constraint_service import create_constraints
-from services.scheduler import run_trip
-from services.contract_service import deploy_contract
-from store.db import PRICE_REPOSITORY, TRIPS
 import os
-#user_address = os.getenv("USER_ADDRESS") # if geeting issue in passing user address from request, you can set it here for testing
+
+from dotenv import load_dotenv
+from fastapi import APIRouter, HTTPException
+
+from services.contract_service import deploy_contract
+from services.langgraph_orchestrator import resume_graph, start_graph
+from services.scheduler import run_trip
+from store.db import PRICE_REPOSITORY, TRIPS
+
+
+load_dotenv()
 
 router = APIRouter()
-from dotenv import load_dotenv
-load_dotenv()
+
+
+def _contract_for(user_address):
+    contract = deploy_contract(user_address)
+    return {
+        "app_id": contract["app_id"],
+        "user_address": user_address,
+    }
+
 
 @router.post("/create_trip")
 async def create_trip(data: dict):
     try:
-        # 🔹 Step 1: Validate input
         if "user_id" not in data or "query" not in data:
             raise HTTPException(status_code=400, detail="Missing user_id or query")
 
         user_id = data["user_id"]
         query = data["query"]
-        #user_address = data["user_address"] 
         user_address = os.getenv("USER_ADDRESS") or data.get("user_address")
-        #user_address = "DUmmt"
+        graph_state = start_graph(user_id, query)
+        constraints = graph_state["constraints"]
 
-        # 🔹 Step 2: Parse using LLM
-        parsed = parse_query_llm(query)
+        if graph_state.get("needs_clarification"):
+            TRIPS[constraints["trip_id"]] = {
+                "constraints": constraints,
+                "status": "NEEDS_CLARIFICATION",
+                "graph_state": graph_state,
+            }
+            return {
+                "trip_id": constraints["trip_id"],
+                "status": "NEEDS_CLARIFICATION",
+                "clarification_question": graph_state.get("clarification_question"),
+                "parsed": constraints,
+            }
 
-        # 🔹 Step 3: Create constraints
-        constraints = create_constraints(user_id, parsed)
-
-        # 🔹 Step 4: Lock funds (blockchain stub)
-        # contract = lock_funds(user_id, constraints["budget"])
-        
-        contract = deploy_contract(user_address) # this line is causing the internal server error
-        #contract = {"app_id": 12345}
-
-        # 🔹 Step 5: Store state
         TRIPS[constraints["trip_id"]] = {
             "constraints": constraints,
             "status": "ACTIVE",
-            "contract": {
-                "app_id": contract["app_id"],
-                "user_address": user_address
-            }
+            "graph_state": graph_state,
+            "contract": _contract_for(user_address),
         }
+        asyncio.create_task(run_trip(constraints["trip_id"]))
 
-        # 🔹 Step 6: Start async monitoring
-        asyncio.create_task(
-            run_trip(constraints["trip_id"])
-        )
-
-        # 🔹 Step 7: Response
         return {
             "trip_id": constraints["trip_id"],
             "status": "STARTED",
-            "parsed": parsed,  # useful for debugging
-            "contract": {
-                "app_id": contract["app_id"],
-                "user_address": user_address
-            }
+            "parsed": constraints,
+            "contract": TRIPS[constraints["trip_id"]]["contract"],
         }
 
-    except Exception as e:
-        print("❌ Error in create_trip:", e)
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        print("Error in create_trip:", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/trip/{trip_id}/message")
+async def update_trip_from_user(trip_id: str, data: dict):
+    trip = TRIPS.get(trip_id)
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    graph_state = resume_graph(
+        trip.get("graph_state", {}),
+        user_message=data.get("message", ""),
+        approved=data.get("approved"),
+    )
+    trip["graph_state"] = graph_state
+    trip["constraints"] = graph_state["constraints"]
+
+    if graph_state.get("needs_clarification"):
+        trip["status"] = "NEEDS_CLARIFICATION"
+    elif graph_state.get("requires_human_approval"):
+        trip["status"] = "AWAITING_HUMAN_APPROVAL"
+    else:
+        trip["status"] = "ACTIVE"
+        if not trip.get("contract"):
+            user_address = os.getenv("USER_ADDRESS") or data.get("user_address")
+            trip["contract"] = _contract_for(user_address)
+        asyncio.create_task(run_trip(trip_id))
+
+    return {
+        "trip_id": trip_id,
+        "status": trip["status"],
+        "constraints": trip["constraints"],
+        "clarification_question": graph_state.get("clarification_question"),
+        "human_approval_request": graph_state.get("human_approval_request"),
+    }
 
 
 @router.get("/status/{trip_id}")
@@ -77,17 +110,20 @@ async def get_trip_status(trip_id: str):
 
     history = PRICE_REPOSITORY.get_history(trip_id)
     latest_snapshot = history[-1] if history else {}
+    graph_state = trip.get("graph_state", {})
 
     return {
         "trip_id": trip_id,
         "status": trip["status"],
         "constraints": trip["constraints"],
         "contract": trip.get("contract"),
-        "components": latest_snapshot.get("components", []),
+        "components": latest_snapshot.get("components", graph_state.get("components", [])),
         "price_history": history,
-        "last_decision": trip.get("last_decision"),
-        "last_ml_prediction": trip.get("last_ml_prediction"),
+        "last_decision": trip.get("last_decision") or graph_state.get("decision"),
+        "last_ml_prediction": trip.get("last_ml_prediction") or graph_state.get("ml_prediction"),
         "last_checked_at": trip.get("last_checked_at"),
         "booking": trip.get("booking"),
         "error": trip.get("error"),
+        "clarification_question": graph_state.get("clarification_question"),
+        "human_approval_request": graph_state.get("human_approval_request"),
     }
