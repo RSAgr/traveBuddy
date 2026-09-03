@@ -19,6 +19,7 @@ def snapshot_for(trip_id, constraints, components):
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "trip_id": trip_id,
+        "source": constraints.get("source"),
         "route": route_for(constraints),
         "destination": constraints.get("destination", route_for(constraints)),
         "transport_type": "+".join(transport_modes) or primary_component["mode"],

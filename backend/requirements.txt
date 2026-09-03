@@ -8,3 +8,4 @@ aiokafka
 joblib
 scikit-learn
 langgraph
+psycopg[binary,pool]

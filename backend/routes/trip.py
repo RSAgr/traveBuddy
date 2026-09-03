@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from services.contract_service import deploy_contract
 from services.langgraph_orchestrator import resume_graph, start_graph
 from services.scheduler import run_trip
-from store.db import PRICE_REPOSITORY, TRIPS
+from store.db import BLOCKCHAIN_REPOSITORY, DECISION_REPOSITORY, PRICE_REPOSITORY, TRIPS, TRIP_REPOSITORY
 
 
 load_dotenv()
@@ -27,6 +27,7 @@ def _contract_for(user_address):
     return {
         "app_id": contract["app_id"],
         "user_address": user_address,
+        "tx_id": contract.get("tx_id"),
     }
 
 
@@ -48,6 +49,7 @@ async def create_trip(data: dict):
                 "status": "NEEDS_CLARIFICATION",
                 "graph_state": graph_state,
             }
+            TRIP_REPOSITORY.save(constraints["trip_id"], constraints, "NEEDS_CLARIFICATION")
             return {
                 "trip_id": constraints["trip_id"],
                 "status": "NEEDS_CLARIFICATION",
@@ -61,6 +63,11 @@ async def create_trip(data: dict):
             "graph_state": graph_state,
             "contract": _contract_for(user_address),
         }
+        TRIP_REPOSITORY.save(constraints["trip_id"], constraints, "ACTIVE")
+        if graph_state.get("decision"):
+            DECISION_REPOSITORY.save(constraints["trip_id"], graph_state["decision"], graph_state.get("ml_prediction"))
+        contract = TRIPS[constraints["trip_id"]]["contract"]
+        BLOCKCHAIN_REPOSITORY.save(constraints["trip_id"], contract.get("app_id"), contract.get("tx_id"), "MOCK" if contract.get("app_id") == "mock-app" else "DEPLOYED", {"user_address": contract.get("user_address")})
         asyncio.create_task(run_trip(constraints["trip_id"]))
 
         return {
@@ -98,7 +105,13 @@ async def update_trip_from_user(trip_id: str, data: dict):
         if not trip.get("contract"):
             user_address = os.getenv("USER_ADDRESS") or data.get("user_address")
             trip["contract"] = _contract_for(user_address)
+            contract = trip["contract"]
+            BLOCKCHAIN_REPOSITORY.save(trip_id, contract.get("app_id"), contract.get("tx_id"), "MOCK" if contract.get("app_id") == "mock-app" else "DEPLOYED", {"user_address": contract.get("user_address")})
         asyncio.create_task(run_trip(trip_id))
+
+    TRIP_REPOSITORY.save(trip_id, trip["constraints"], trip["status"])
+    if graph_state.get("decision"):
+        DECISION_REPOSITORY.save(trip_id, graph_state["decision"], graph_state.get("ml_prediction"))
 
     return {
         "trip_id": trip_id,

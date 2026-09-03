@@ -1,7 +1,7 @@
 import asyncio
 from services.langgraph_orchestrator import resume_graph
 from services.booking_executor import execute_booking
-from store.db import PRICE_REPOSITORY, TRIPS
+from store.db import DECISION_REPOSITORY, TRIPS, TRIP_REPOSITORY
 from services.contract_service import call_app
 from dotenv import load_dotenv
 from datetime import datetime, timezone
@@ -10,8 +10,6 @@ load_dotenv()
 
 
 async def run_trip(trip_id):
-    PRICE_REPOSITORY.clear_trip(trip_id)
-
     try:
         while True:
             trip = TRIPS[trip_id]
@@ -33,6 +31,8 @@ async def run_trip(trip_id):
             trip["last_decision"] = decision
             trip["last_ml_prediction"] = ml_prediction
             trip["last_checked_at"] = datetime.now(timezone.utc).isoformat()
+            TRIP_REPOSITORY.save(trip_id, trip["constraints"], trip["status"])
+            DECISION_REPOSITORY.save(trip_id, decision, ml_prediction)
 
             app_id = trip["contract"]["app_id"]
             user_address = trip["contract"]["user_address"]
@@ -50,6 +50,7 @@ async def run_trip(trip_id):
                     "ml_prediction": ml_prediction,
                     "executed_at": datetime.now(timezone.utc).isoformat(),
                 }
+                TRIP_REPOSITORY.save(trip_id, trip["constraints"], "BOOKED", decision.get("itinerary"))
                 break
 
             await asyncio.sleep(5)  # polling interval
@@ -59,4 +60,5 @@ async def run_trip(trip_id):
             trip["status"] = "FAILED"
             trip["error"] = str(exc)
             trip["failed_at"] = datetime.now(timezone.utc).isoformat()
+            TRIP_REPOSITORY.save(trip_id, trip.get("constraints", {}), "FAILED")
         print(f"Trip monitor failed for {trip_id}: {exc}")

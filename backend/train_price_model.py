@@ -11,6 +11,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
 from services.ml_service import MODEL_PATH, price_ml_service
+from store.db import PRICE_REPOSITORY
 
 
 def _load_rows(input_path):
@@ -35,8 +36,11 @@ def _coerce_rows(rows):
     return rows
 
 
-def train_offline(input_path=Path("data/synthetic_price_history.csv"), model_path=MODEL_PATH):
-    rows = _coerce_rows(_load_rows(input_path))
+def train_offline(input_path=Path("data/synthetic_price_history.csv"), model_path=MODEL_PATH, database=False):
+    if database:
+        rows = price_ml_service.prepare_training_rows(PRICE_REPOSITORY.all_snapshots())
+    else:
+        rows = _coerce_rows(_load_rows(input_path))
     if not rows:
         print("No historical price snapshots available yet.")
         return None
@@ -96,5 +100,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train the TraveBuddy price prediction model.")
     parser.add_argument("--input", type=Path, default=Path("data/synthetic_price_history.csv"))
     parser.add_argument("--model-path", type=Path, default=MODEL_PATH)
+    parser.add_argument("--database", action="store_true", help="Train from durable PostgreSQL price history.")
     args = parser.parse_args()
-    train_offline(input_path=args.input, model_path=args.model_path)
+    train_offline(input_path=args.input, model_path=args.model_path, database=args.database)

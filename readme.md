@@ -261,3 +261,8 @@ This project is open source under the MIT License. See the LICENSE file for deta
 ## Contact
 
 For questions or feedback about TraveBuddy, please open an issue on GitHub.
+# PostgreSQL persistence
+
+The database stores only durable records: trip/project metadata, historical price observations, booking decisions, and public blockchain deployment metadata. Live LangGraph state, API responses, and caches remain in memory.
+
+For local development, start PostgreSQL with `docker compose up -d postgres`, then from `backend/` run `python scripts/migrate.py`. Copy `.env.example` to `.env` and set `DATABASE_URL`. To load the existing training history, run `python scripts/import_price_history.py data/synthetic_price_history.csv`; train from it with `python train_price_model.py --database`.
