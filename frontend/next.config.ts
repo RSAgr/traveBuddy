@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
-const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8000";
-
+// FastAPI is started on IPv4 loopback. Using the same explicit address avoids
+// Windows resolving `localhost` to IPv6 and dropping the Next.js proxy request.
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
@@ -14,14 +14,6 @@ const nextConfig: NextConfig = {
         hostname: "places.googleapis.com",
       }
     ],
-  },
-  rewrites: async () => {
-    return [
-      {
-        source: "/api/proxy/:path*",
-        destination: `${backendUrl}/:path*`,
-      },
-    ];
   },
 };
 

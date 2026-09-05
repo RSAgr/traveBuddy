@@ -1,6 +1,7 @@
 uvicorn
 py-algorand-sdk
 fastapi
+x402-avm[fastapi,requests,avm]==2.0.2
 google-generativeai
 dotenv
 pyteal

@@ -45,6 +45,37 @@ Our decision engine continuously monitors prices and executes bookings at optima
 - Preserves a strict WAIT/BOOK workflow so the LLM recommends actions but never directly controls payments or blockchain execution
 - Keeps you informed of all decisions and actions
 
+### x402 Algorand Micropayments for Price Data
+
+The mock price catalog is exposed as a separately runnable paid API, so the
+travel agent can demonstrate the same pay-per-request behavior it would use
+with a real provider. When enabled, `GET /api/prices` returns an HTTP `402`
+with x402 payment requirements; the agent's x402 AVM client signs a USDC
+Algorand TestNet payment, retries the request, and receives the quote only
+after the facilitator verifies and settles it.
+
+For a local demo, create and fund two Algorand TestNet accounts, opt both into
+TestNet USDC (ASA `10458941`), then copy the x402 values from
+`backend/x402.env.example` to your uncommitted `.env`. Start the two processes
+from `backend`:
+
+```bash
+uvicorn main:price_api --port 4021
+uvicorn main:app --reload --port 8000
+```
+
+`PRICE_API_URL=http://127.0.0.1:4021` makes the agent use the paid service.
+Keep it unset for the existing zero-cost local mock mode. The price service
+uses `https://facilitator.goplausible.xyz` by default; change
+`X402_FACILITATOR_URL` if your event provides another Algorand-capable
+facilitator.
+
+To create the two wallets in code, run
+`python scripts/bootstrap_x402_testnet.py`. It prints the environment values
+and wallet addresses. After claiming TestNet ALGO and USDC from their faucets,
+add both mnemonics to `.env` and run the same command again; it submits the
+USDC opt-in transactions automatically.
+
 ### Complete Itinerary Planning
 
 TraveBuddy now plans beyond a single ticket:

@@ -9,6 +9,10 @@ import HotelSection from "@/components/travel-planner/sections/HotelSection";
 import MessageThread from "@/components/travel-planner/sections/MessageThread";
 import { CheckCircle2, Send } from "lucide-react";
 
+// Call FastAPI directly. The former Next.js rewrite intermittently reset the
+// upstream socket while an x402-paid price lookup was in progress.
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:8000";
+
 type DecisionSummary = {
     decision: string;
     reason: string;
@@ -74,7 +78,7 @@ export default function Dashboard() {
         }
         pollingIntervalRef.current = setInterval(async () => {
             try {
-                const res = await fetch(`/api/proxy/status/${currentTripId}`);
+                const res = await fetch(`${backendUrl}/status/${currentTripId}`);
                 if (res.status === 404) {
                     setIsPolling(false);
                     setFunctionCalls([]);
@@ -183,7 +187,7 @@ export default function Dashboard() {
         alreadyBookedRef.current = false;
 
         try {
-            const res = await fetch("/api/proxy/create_trip", {
+            const res = await fetch(`${backendUrl}/create_trip`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ user_id: "user123", query: prompt, user_address: address }),
@@ -261,7 +265,7 @@ export default function Dashboard() {
         setIsPolling(true);
         setFunctionCalls(["Updating trip constraints..."]);
         try {
-            const res = await fetch(`/api/proxy/trip/${tripId}/message`, {
+            const res = await fetch(`${backendUrl}/trip/${tripId}/message`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

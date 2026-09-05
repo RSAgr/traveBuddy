@@ -143,11 +143,26 @@ async def update_trip_from_user(trip_id: str, data: dict):
 async def get_trip_status(trip_id: str):
     trip = TRIPS.get(trip_id)
     if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
+        # Uvicorn reloads and multiple workers do not share Python memory. The
+        # UI can still show a created trip by recovering its durable snapshot.
+        try:
+            persisted = TRIP_REPOSITORY.get(trip_id)
+        except Exception as exc:
+            print(f"Could not recover trip {trip_id} from storage: {exc}")
+            persisted = None
+        if not persisted:
+            raise HTTPException(status_code=404, detail="Trip not found")
+        trip = {
+            "constraints": persisted["constraints"],
+            "status": persisted["status"],
+            "graph_state": {},
+            "itinerary": persisted.get("itinerary"),
+        }
 
     history = PRICE_REPOSITORY.get_history(trip_id)
     latest_snapshot = history[-1] if history else {}
     graph_state = trip.get("graph_state", {})
+    persisted_decision, persisted_prediction = DECISION_REPOSITORY.latest(trip_id)
 
     return {
         "trip_id": trip_id,
@@ -156,8 +171,8 @@ async def get_trip_status(trip_id: str):
         "contract": trip.get("contract"),
         "components": latest_snapshot.get("components", graph_state.get("components", [])),
         "price_history": history,
-        "last_decision": trip.get("last_decision") or graph_state.get("decision"),
-        "last_ml_prediction": trip.get("last_ml_prediction") or graph_state.get("ml_prediction"),
+        "last_decision": trip.get("last_decision") or graph_state.get("decision") or persisted_decision,
+        "last_ml_prediction": trip.get("last_ml_prediction") or graph_state.get("ml_prediction") or persisted_prediction,
         "last_checked_at": trip.get("last_checked_at"),
         "booking": trip.get("booking"),
         "error": trip.get("error"),

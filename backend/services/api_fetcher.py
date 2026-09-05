@@ -1,5 +1,6 @@
 import hashlib
 import math
+import os
 import random
 from datetime import datetime, timezone
 
@@ -116,7 +117,11 @@ def fetch_synthetic_prices(constraints, poll_cycle=0):
     return components
 
 
-def fetch_prices(constraints, poll_cycle=0):
+def fetch_prices(constraints, poll_cycle=0, use_paid_api=True):
+    if use_paid_api and os.getenv("PRICE_API_URL"):
+        from services.paid_price_client import fetch_paid_prices
+        return fetch_paid_prices(constraints, poll_cycle=poll_cycle)
+
     from services.mock_travel_data import fetch_puri_mock_prices
 
     return fetch_puri_mock_prices(constraints, poll_cycle=poll_cycle)

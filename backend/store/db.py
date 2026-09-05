@@ -170,12 +170,41 @@ class TripRepository:
             cur.execute("""INSERT INTO trips (id, user_id, source, destination, departure_at, budget, preferences, itinerary, status) VALUES (%s, %s, %s, %s, to_timestamp(%s), %s, %s::jsonb, %s::jsonb, %s) ON CONFLICT (id) DO UPDATE SET source=EXCLUDED.source, destination=EXCLUDED.destination, departure_at=EXCLUDED.departure_at, budget=EXCLUDED.budget, preferences=EXCLUDED.preferences, itinerary=COALESCE(EXCLUDED.itinerary, trips.itinerary), status=EXCLUDED.status, updated_at=now()""", (trip_id, constraints.get("user_id"), constraints.get("source"), constraints.get("destination"), departure, constraints.get("budget"), _json(constraints), _json(itinerary) if itinerary else None, status))
             conn.commit()
 
+    def get(self, trip_id):
+        """Return the durable portion of a trip after a worker restart."""
+        with DATABASE.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, preferences, itinerary, status FROM trips WHERE id = %s",
+                (trip_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            return {
+                "trip_id": row["id"],
+                "constraints": row["preferences"] or {},
+                "itinerary": row["itinerary"],
+                "status": row["status"],
+            }
+
 
 class DecisionRepository:
     def save(self, trip_id, decision, prediction=None):
         with DATABASE.connection() as conn, conn.cursor() as cur:
             cur.execute("INSERT INTO booking_decisions (trip_id, predicted_price, decision, confidence, trend, reasoning, metadata) VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)", (trip_id, prediction, decision.get("decision"), decision.get("confidence"), decision.get("trend"), decision.get("reason"), _json(decision)))
             conn.commit()
+
+    def latest(self, trip_id):
+        with DATABASE.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT metadata, predicted_price FROM booking_decisions "
+                "WHERE trip_id = %s ORDER BY id DESC LIMIT 1",
+                (trip_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None, None
+            return row["metadata"] or {}, float(row["predicted_price"]) if row["predicted_price"] is not None else None
 
 
 class BlockchainRepository:
