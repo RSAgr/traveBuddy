@@ -62,6 +62,7 @@ export default function Dashboard() {
     const [isPolling, setIsPolling] = useState(false);
     const [functionCalls, setFunctionCalls] = useState<string[]>([]);
     const [decisionSummary, setDecisionSummary] = useState<DecisionSummary | null>(null);
+    const [copiedTripId, setCopiedTripId] = useState(false);
     const hasInitiated = useRef(false);
     const alreadyBookedRef = useRef(false);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -299,6 +300,14 @@ export default function Dashboard() {
 
     const hasOutbound = (plan.outbound.cabs?.length ?? 0) > 0 || (plan.outbound.trains?.length ?? 0) > 0;
     const hasHotels = plan.hotels.length > 0;
+    const shortTripId = tripId ? `${tripId.slice(0, 8)}…${tripId.slice(-4)}` : null;
+
+    async function copyTripId() {
+        if (!tripId) return;
+        await navigator.clipboard.writeText(tripId);
+        setCopiedTripId(true);
+        setTimeout(() => setCopiedTripId(false), 1500);
+    }
 
     if (!ready) {
         return (
@@ -310,7 +319,7 @@ export default function Dashboard() {
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-            <header className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-6 py-4 flex items-center justify-between">
+            <header className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-6 py-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">Travel Planner</h1>
                     {tripInput && (
@@ -319,15 +328,27 @@ export default function Dashboard() {
                         </p>
                     )}
                 </div>
-                <button
-                    onClick={() => {
-                        resetSession();
-                        router.push("/travel-planner/details");
-                    }}
-                    className="px-4 py-2 text-xs font-semibold rounded-full border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-                >
-                    &#8635; Re-plan
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                    {tripId && (
+                        <button
+                            type="button"
+                            onClick={copyTripId}
+                            title={tripId}
+                            className="px-4 py-2 text-xs font-semibold rounded-full border border-[#FF5A1F]/30 bg-[#FF5A1F]/10 text-[#FF5A1F] hover:bg-[#FF5A1F]/15 transition"
+                        >
+                            Trip ID: {copiedTripId ? "Copied!" : shortTripId}
+                        </button>
+                    )}
+                    <button
+                        onClick={() => {
+                            resetSession();
+                            router.push("/travel-planner/details");
+                        }}
+                        className="px-4 py-2 text-xs font-semibold rounded-full border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+                    >
+                        &#8635; Re-plan
+                    </button>
+                </div>
             </header>
 
             {isPolling && functionCalls.length > 0 && (

@@ -266,3 +266,7 @@ For questions or feedback about TraveBuddy, please open an issue on GitHub.
 The database stores only durable records: trip/project metadata, historical price observations, booking decisions, and public blockchain deployment metadata. Live LangGraph state, API responses, and caches remain in memory.
 
 For local development, start PostgreSQL with `docker compose up -d postgres`, then from `backend/` run `python scripts/migrate.py`. Copy `.env.example` to `.env` and set `DATABASE_URL`. To load the existing training history, run `python scripts/import_price_history.py data/synthetic_price_history.csv`; train from it with `python train_price_model.py --database`.
+
+## Smart auto-booking / price-rise protection
+
+Pass an `auto_booking` object to `POST /create_trip` (or `POST /trip/{trip_id}/message`) to enable deterministic price protection. For example: `{"enabled": true, "price_rise_threshold_percent": 10, "max_wait_hours": 24, "booking_deadline": "2026-12-20T10:00:00Z", "minimum_confidence": 0.5, "tracked_component_types": ["transport", "stay", "activity"]}`. The system books only when the ML predicted rise meets the threshold and confidence, or when the wait/deadline expires; hard budget and transport constraints are still enforced. The policy and trigger are persisted with the decision.

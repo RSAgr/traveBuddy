@@ -14,6 +14,7 @@ interface TripDetails {
     adults: number;
     children: number;
     budget: string;
+    bookingTiming: "balanced" | "early" | "postpone";
     preferences: string;
 }
 
@@ -172,6 +173,7 @@ export default function TripFormWizard() {
         adults: 1,
         children: 0,
         budget: "",
+        bookingTiming: "balanced",
         preferences: "",
     });
 
@@ -387,6 +389,47 @@ export default function TripFormWizard() {
                                 }
                                 autoFocus
                             />
+                        </div>
+                        <div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 block font-medium">Booking timing</p>
+                            <div className="grid gap-2">
+                                {[
+                                    {
+                                        value: "balanced",
+                                        title: "Balanced",
+                                        description: "Let TraveBuddy balance savings with booking certainty.",
+                                    },
+                                    {
+                                        value: "postpone",
+                                        title: "Postpone as long as possible",
+                                        description: "Wait for better prices and book only near the deadline or if prices may rise.",
+                                    },
+                                    {
+                                        value: "early",
+                                        title: "Book early",
+                                        description: "Prefer locking a good complete itinerary sooner.",
+                                    },
+                                ].map((option) => (
+                                    <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() =>
+                                            setDetails((d) => ({
+                                                ...d,
+                                                bookingTiming: option.value as TripDetails["bookingTiming"],
+                                            }))
+                                        }
+                                        className={`text-left rounded-xl border px-4 py-3 transition-all ${
+                                            details.bookingTiming === option.value
+                                                ? "border-[#FF5A1F] bg-[#FFF5F0] dark:bg-[#FF5A1F]/10"
+                                                : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 hover:border-[#FF5A1F]/60"
+                                        }`}
+                                    >
+                                        <span className="block text-sm font-semibold text-gray-900 dark:text-gray-100">{option.title}</span>
+                                        <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">{option.description}</span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                         <div className="relative">
                             <textarea

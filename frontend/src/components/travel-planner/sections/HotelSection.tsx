@@ -131,7 +131,7 @@ export default function HotelSection({ hotels }: { hotels: HotelDetails[] }) {
 
     return (
         <section className="tp-section">
-            <h2 className="tp-section-title">🏨 Hotels</h2>
+            <h2 className="tp-section-title">Hotels</h2>
             <div className="tp-hscroll">
                 {hotels.map((h, i) => (
                     <HotelCard key={i} h={h} />

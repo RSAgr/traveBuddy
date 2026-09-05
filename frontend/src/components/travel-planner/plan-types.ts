@@ -55,6 +55,7 @@ export interface TripInput {
     adults: number;
     children: number;
     budget: string;
+    bookingTiming: "balanced" | "early" | "postpone";
     preferences: string;
 }
 
@@ -146,6 +147,19 @@ export function tripInputToPrompt(input: TripInput): string {
         `Travellers: ${input.adults} adult, ${input.children} child.`,
         `Budget: ₹${Number(input.budget).toLocaleString("en-IN")}.`,
     ];
+    if (input.bookingTiming === "postpone") {
+        parts.push(
+            "Booking timing preference: postpone booking as long as safely possible. Use price monitoring and only book when the deadline is close or ML predicts a meaningful price/availability risk.",
+            "Auto-booking policy: enabled; strategy=latest_safe; price_rise_threshold_percent=12; minimum_confidence=0.6; tracked_component_types=transport,stay."
+        );
+    } else if (input.bookingTiming === "early") {
+        parts.push(
+            "Booking timing preference: book early once a good in-budget complete itinerary is found.",
+            "Auto-booking policy: disabled unless human approval is requested."
+        );
+    } else {
+        parts.push("Booking timing preference: balanced between price savings and booking certainty.");
+    }
     if (input.preferences.trim()) {
         parts.push(`Preferences/Notes: ${input.preferences.trim()}`);
     }
@@ -157,13 +171,20 @@ export function tripInputToPrompt(input: TripInput): string {
  */
 export function tripInputSummary(input: TripInput): string {
     const lines = [
-        `📍 **${input.startingPoint}** → **${input.destination}**`,
-        `📅 ${input.startDate} to ${input.endDate}`,
-        `👥 ${input.adults} adult(s)${input.children > 0 ? `, ${input.children} child(ren)` : ""}`,
-        `💰 Budget: ₹${Number(input.budget).toLocaleString("en-IN")}`,
+        `Route: **${input.startingPoint}** → **${input.destination}**`,
+        `Dates: ${input.startDate} to ${input.endDate}`,
+        `Travellers: ${input.adults} adult(s)${input.children > 0 ? `, ${input.children} child(ren)` : ""}`,
+        `Budget: ₹${Number(input.budget).toLocaleString("en-IN")}`,
+        `Booking timing: ${
+            input.bookingTiming === "postpone"
+                ? "Postpone as long as safely possible"
+                : input.bookingTiming === "early"
+                  ? "Book early when a good option appears"
+                  : "Balanced"
+        }`,
     ];
     if (input.preferences.trim()) {
-        lines.push(`✨ Preferences: ${input.preferences.trim()}`);
+        lines.push(`Preferences: ${input.preferences.trim()}`);
     }
     return lines.join("  \n");
 }

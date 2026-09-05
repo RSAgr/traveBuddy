@@ -60,6 +60,105 @@ class PriceRepository:
             return [{"trip_id": r["trip_id"], "route": r["route"], "transport_type": r["transport_type"], "current_price": float(r["current_price"]), "days_to_departure": r["days_to_departure"], "features": r["features"]} for r in cur.fetchall()]
 
 
+class PriceOverrideRepository:
+    def list_overrides(self, active_only=False):
+        query = "SELECT id, route, component_name, component_type, mode, price, price_multiplier, active, reason, updated_at FROM price_overrides"
+        params = ()
+        if active_only:
+            query += " WHERE active = true"
+        query += " ORDER BY route, component_type, mode, component_name"
+        with DATABASE.connection() as conn, conn.cursor() as cur:
+            cur.execute(query, params)
+            return [
+                {
+                    **row,
+                    "price": float(row["price"]) if row["price"] is not None else None,
+                    "price_multiplier": float(row["price_multiplier"]) if row["price_multiplier"] is not None else None,
+                    "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+                }
+                for row in cur.fetchall()
+            ]
+
+    def active_for_route(self, route):
+        route_key = route or "Puri"
+        with DATABASE.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT route, component_name, component_type, mode, price, price_multiplier, reason
+                FROM price_overrides
+                WHERE active = true AND lower(route) = lower(%s)
+                """,
+                (route_key,),
+            )
+            return {
+                row["component_name"]: {
+                    "route": row["route"],
+                    "component_name": row["component_name"],
+                    "component_type": row["component_type"],
+                    "mode": row["mode"],
+                    "price": float(row["price"]) if row["price"] is not None else None,
+                    "price_multiplier": float(row["price_multiplier"]) if row["price_multiplier"] is not None else None,
+                    "reason": row["reason"],
+                }
+                for row in cur.fetchall()
+            }
+
+    def upsert(self, data):
+        if not data.get("component_name"):
+            raise ValueError("component_name is required")
+        if data.get("price") is None and data.get("price_multiplier") is None:
+            raise ValueError("price or price_multiplier is required")
+        route = data.get("route") or "Puri"
+        active = data.get("active", True)
+        with DATABASE.connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO price_overrides
+                    (route, component_name, component_type, mode, price, price_multiplier, active, reason)
+                VALUES
+                    (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (route, component_name)
+                DO UPDATE SET
+                    component_type = EXCLUDED.component_type,
+                    mode = EXCLUDED.mode,
+                    price = EXCLUDED.price,
+                    price_multiplier = EXCLUDED.price_multiplier,
+                    active = EXCLUDED.active,
+                    reason = EXCLUDED.reason,
+                    updated_at = now()
+                RETURNING id, route, component_name, component_type, mode, price, price_multiplier, active, reason, updated_at
+                """,
+                (
+                    route,
+                    data["component_name"],
+                    data.get("component_type"),
+                    data.get("mode"),
+                    data.get("price"),
+                    data.get("price_multiplier"),
+                    active,
+                    data.get("reason"),
+                ),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return {
+                **row,
+                "price": float(row["price"]) if row["price"] is not None else None,
+                "price_multiplier": float(row["price_multiplier"]) if row["price_multiplier"] is not None else None,
+                "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+            }
+
+    def clear(self, route=None):
+        with DATABASE.connection() as conn, conn.cursor() as cur:
+            if route:
+                cur.execute("UPDATE price_overrides SET active = false, updated_at = now() WHERE lower(route) = lower(%s)", (route,))
+            else:
+                cur.execute("UPDATE price_overrides SET active = false, updated_at = now()")
+            count = cur.rowcount
+            conn.commit()
+            return count
+
+
 class TripRepository:
     def save(self, trip_id, constraints, status, itinerary=None):
         try:
@@ -87,6 +186,7 @@ class BlockchainRepository:
 
 
 PRICE_REPOSITORY = PriceRepository()
+PRICE_OVERRIDE_REPOSITORY = PriceOverrideRepository()
 TRIP_REPOSITORY = TripRepository()
 DECISION_REPOSITORY = DecisionRepository()
 BLOCKCHAIN_REPOSITORY = BlockchainRepository()

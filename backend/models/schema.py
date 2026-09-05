@@ -11,6 +11,7 @@ class Constraint(BaseModel):
     budget: int
     deadline: int
     transport_modes: List[str]
+    auto_booking: Optional[dict] = None
 
 class Component(BaseModel):
     type: str

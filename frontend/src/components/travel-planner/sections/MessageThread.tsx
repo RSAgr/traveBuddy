@@ -58,7 +58,7 @@ export default function MessageThread({
 
     return (
         <section className="tp-section">
-            <h2 className="tp-section-title">💬 Messages</h2>
+            <h2 className="tp-section-title">Messages</h2>
 
             <div className="space-y-4">
                 {messages.map((msg, i) =>

@@ -60,7 +60,7 @@ export default function ItinerarySection({
 
     return (
         <section className="tp-section">
-            <h2 className="tp-section-title">📋 Itinerary</h2>
+            <h2 className="tp-section-title">Itinerary</h2>
             <div className="tp-hscroll">
                 {itinerary.map((a, i) => (
                     <DayCard key={i} activity={a} dayNum={i + 1} />

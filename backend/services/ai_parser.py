@@ -21,7 +21,9 @@ Return ONLY valid JSON in this format:
   "destination": string,
   "budget": integer,
   "deadline_days_from_now": integer,
-  "transport_modes": list of ["flight", "train", "bus"]
+  "transport_modes": list of ["flight", "train", "bus"],
+  "booking_timing": "balanced" | "early" | "postpone",
+  "auto_booking": {{"enabled": boolean, "price_rise_threshold_percent": number, "max_wait_hours": number, "minimum_confidence": number}}
 }}
 
 Rules:
@@ -29,6 +31,9 @@ Rules:
 - Convert relative time (like "next weekend") into days from now
 - Budget must be integer
 - No explanation, only JSON
+- Set booking_timing to "postpone" when the user wants to wait/postpone booking as long as possible
+- Include auto_booking when the user asks for price-rise protection, auto-booking, or postponing booking safely
+- For postpone booking, set auto_booking enabled=true, price_rise_threshold_percent=12, minimum_confidence=0.6
 
 User Query:
 {query}
@@ -65,7 +70,8 @@ def parse_query_llm(query: str):
 
     import google.generativeai as genai
 
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+    #genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+    genai.configure(api_key=os.getenv("AIzaSyAdKiRABlAIQzpVQ17DKE8q31IHy3_kGmQ"))
     model = genai.GenerativeModel("gemini-2.5-flash")
     prompt = build_prompt(query)
 
@@ -97,12 +103,16 @@ def parse_query_llm(query: str):
         if not isinstance(transport_modes, list):
             transport_modes = ["flight", "train", "bus"]
 
-        return {
+        parsed = {
             "destination": destination,
             "budget": budget,
             "deadline": int(deadline.timestamp()),
-            "transport_modes": transport_modes
+            "transport_modes": transport_modes,
+            "booking_timing": data.get("booking_timing") or "balanced",
         }
+        if data.get("auto_booking"):
+            parsed["auto_booking"] = data["auto_booking"]
+        return parsed
 
     except Exception as e:
         print("❌ LLM parsing failed:", e)

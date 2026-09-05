@@ -110,6 +110,27 @@ def _normalise_constraints(parsed, state):
     constraints.setdefault("destination", "Puri")
     constraints.setdefault("transport_modes", ["flight", "train", "bus"])
     constraints.setdefault("budget", 10000)
+    if constraints.get("booking_timing") == "postpone" and not constraints.get("auto_booking"):
+        constraints["auto_booking"] = {
+            "enabled": True,
+            "strategy": "latest_safe",
+            "price_rise_threshold_percent": 12,
+            "minimum_confidence": 0.6,
+            "booking_deadline": constraints.get("deadline"),
+            "tracked_component_types": ["transport", "stay"],
+        }
+    policy = constraints.get("auto_booking")
+    if policy:
+        constraints["auto_booking"] = {
+            "enabled": bool(policy.get("enabled", True)),
+            "strategy": policy.get("strategy", "price_protection"),
+            "price_rise_threshold_percent": float(policy.get("price_rise_threshold_percent", 10)),
+            "minimum_confidence": float(policy.get("minimum_confidence", 0.5)),
+            "max_wait_hours": policy.get("max_wait_hours"),
+            "booking_deadline": policy.get("booking_deadline") or constraints.get("deadline"),
+            "tracked_component_types": policy.get("tracked_component_types", ["transport", "stay"]),
+            "started_at": policy.get("started_at") or datetime.now(timezone.utc).isoformat(),
+        }
     return constraints
 
 
@@ -131,13 +152,33 @@ def _fallback_parse(query):
     else:
         deadline = 7
 
-    return {
+    parsed = {
         "source": "Ranchi",
         "destination": "Puri" if "puri" in lower_query else "Puri",
         "budget": budget,
         "deadline": deadline,
         "transport_modes": modes or ["flight", "train", "bus"],
     }
+    if (
+        "postpone booking" in lower_query
+        or "postpone as long" in lower_query
+        or "latest_safe" in lower_query
+        or "as long as safely possible" in lower_query
+    ):
+        parsed["booking_timing"] = "postpone"
+        parsed["auto_booking"] = {
+            "enabled": True,
+            "strategy": "latest_safe",
+            "price_rise_threshold_percent": 12,
+            "minimum_confidence": 0.6,
+            "booking_deadline": deadline,
+            "tracked_component_types": ["transport", "stay"],
+        }
+    elif "book early" in lower_query:
+        parsed["booking_timing"] = "early"
+    else:
+        parsed["booking_timing"] = "balanced"
+    return parsed
 
 
 def parse_or_update_constraints(state: TravelGraphState):
@@ -417,13 +458,14 @@ def build_travel_graph():
 travel_graph = build_travel_graph()
 
 
-def start_graph(user_id, query, trip_id=None):
+def start_graph(user_id, query, trip_id=None, auto_booking=None):
     trip_id = trip_id or str(uuid.uuid4())
     state = {
         "trip_id": trip_id,
         "user_id": user_id,
         "messages": [{"role": "user", "content": query}],
         "status": "STARTED",
+        "constraints": {"auto_booking": auto_booking} if auto_booking else {},
     }
     return travel_graph.invoke(state)
 

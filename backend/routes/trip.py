@@ -7,7 +7,14 @@ from fastapi import APIRouter, HTTPException
 from services.contract_service import deploy_contract
 from services.langgraph_orchestrator import resume_graph, start_graph
 from services.scheduler import run_trip
-from store.db import BLOCKCHAIN_REPOSITORY, DECISION_REPOSITORY, PRICE_REPOSITORY, TRIPS, TRIP_REPOSITORY
+from store.db import (
+    BLOCKCHAIN_REPOSITORY,
+    DECISION_REPOSITORY,
+    PRICE_OVERRIDE_REPOSITORY,
+    PRICE_REPOSITORY,
+    TRIPS,
+    TRIP_REPOSITORY,
+)
 
 
 load_dotenv()
@@ -40,7 +47,12 @@ async def create_trip(data: dict):
         user_id = data["user_id"]
         query = data["query"]
         user_address = os.getenv("USER_ADDRESS") or data.get("user_address")
-        graph_state = start_graph(user_id, query)
+        auto_booking = data.get("auto_booking")
+        # Accept the flat threshold form as a convenient backward-compatible API option.
+        if auto_booking is None and any(key in data for key in ("price_rise_threshold_percent", "max_wait_hours", "booking_deadline")):
+            auto_booking = {key: data[key] for key in ("price_rise_threshold_percent", "max_wait_hours", "booking_deadline", "minimum_confidence", "tracked_component_types") if key in data}
+            auto_booking["enabled"] = True
+        graph_state = start_graph(user_id, query, auto_booking=auto_booking)
         constraints = graph_state["constraints"]
 
         if graph_state.get("needs_clarification"):
@@ -93,6 +105,11 @@ async def update_trip_from_user(trip_id: str, data: dict):
         user_message=data.get("message", ""),
         approved=data.get("approved"),
     )
+    if data.get("auto_booking"):
+        graph_state["constraints"]["auto_booking"] = {
+            **graph_state["constraints"].get("auto_booking", {}),
+            **data["auto_booking"],
+        }
     trip["graph_state"] = graph_state
     trip["constraints"] = graph_state["constraints"]
 
@@ -147,3 +164,56 @@ async def get_trip_status(trip_id: str):
         "clarification_question": graph_state.get("clarification_question"),
         "human_approval_request": graph_state.get("human_approval_request"),
     }
+
+
+@router.get("/demo/price-overrides")
+async def list_price_overrides(active_only: bool = False):
+    return {"overrides": PRICE_OVERRIDE_REPOSITORY.list_overrides(active_only=active_only)}
+
+
+@router.post("/demo/price-overrides")
+async def set_price_override(data: dict):
+    try:
+        override = PRICE_OVERRIDE_REPOSITORY.upsert(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"override": override}
+
+
+@router.post("/demo/price-overrides/clear")
+async def clear_price_overrides(data: dict | None = None):
+    route = (data or {}).get("route")
+    updated = PRICE_OVERRIDE_REPOSITORY.clear(route=route)
+    return {"disabled_overrides": updated}
+
+
+@router.post("/demo/trips/{trip_id}/surge-selected")
+async def surge_selected_trip_components(trip_id: str, data: dict | None = None):
+    trip = TRIPS.get(trip_id)
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    decision = trip.get("last_decision") or trip.get("graph_state", {}).get("decision") or {}
+    selected_components = decision.get("selected_components") or []
+    if not selected_components:
+        raise HTTPException(status_code=400, detail="No selected components are available yet. Wait for one polling cycle.")
+
+    multiplier = float((data or {}).get("price_multiplier", 1.25))
+    route = (data or {}).get("route") or trip.get("constraints", {}).get("destination") or "Puri"
+    reason = (data or {}).get("reason") or "Demo selected-combo surge"
+
+    overrides = []
+    for component in selected_components:
+        if component.get("type") not in {"transport", "stay"}:
+            continue
+        overrides.append(PRICE_OVERRIDE_REPOSITORY.upsert({
+            "route": route,
+            "component_name": component["name"],
+            "component_type": component.get("type"),
+            "mode": component.get("mode"),
+            "price_multiplier": multiplier,
+            "active": True,
+            "reason": reason,
+        }))
+
+    return {"overrides": overrides}

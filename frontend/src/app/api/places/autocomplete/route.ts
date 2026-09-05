@@ -1,6 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCachedAutocomplete, setCachedAutocomplete } from "@/lib/redis";
 
+const LOCAL_PLACE_SUGGESTIONS = [
+    "Ranchi, Jharkhand, India",
+    "Puri, Odisha, India",
+    "Bhubaneswar, Odisha, India",
+    "Cuttack, Odisha, India",
+    "Kolkata, West Bengal, India",
+    "Jamshedpur, Jharkhand, India",
+    "Patna, Bihar, India",
+    "Varanasi, Uttar Pradesh, India",
+    "New Delhi, Delhi, India",
+    "Mumbai, Maharashtra, India",
+    "Bengaluru, Karnataka, India",
+    "Hyderabad, Telangana, India",
+];
+
+function getLocalPredictions(input: string) {
+    const normalizedInput = input.trim().toLowerCase();
+    return LOCAL_PLACE_SUGGESTIONS
+        .filter((place) => place.toLowerCase().includes(normalizedInput))
+        .slice(0, 6)
+        .map((description, index) => ({
+            description,
+            place_id: `local-${description.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${index}`,
+        }));
+}
+
 /**
  * POST /api/places/autocomplete
  * Server-side proxy to Google Places Autocomplete.
@@ -10,16 +36,8 @@ import { getCachedAutocomplete, setCachedAutocomplete } from "@/lib/redis";
  * Returns: { predictions: { description: string; place_id: string }[] }
  */
 export async function POST(req: NextRequest) {
-    //const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-    const apiKey = "AIzaSyCIuM-ixp6EiCXxhmK19BLAJeqPQgGakO8";
-    
-    if (!apiKey) {
-        console.error("Missing Google Maps API key in env")
-        return NextResponse.json(
-            { error: "Something went wrong" },
-            { status: 500 },
-        );
-    }
+    //const apiKey = process.env.GOOGLE_MAPS_API_KEY ?? process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    const apiKey = "AIzaSyCIuM-ixp6EiCXxhmK19BLAJeqPQgGakO8"
 
     let body: { input?: string };
     try {
@@ -38,6 +56,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(cachedResponse);
     }
 
+    if (!apiKey) {
+        const predictions = getLocalPredictions(input);
+        await setCachedAutocomplete(input, { predictions });
+        return NextResponse.json({ predictions, source: "local" });
+    }
+
     const url = new URL(
         "https://maps.googleapis.com/maps/api/place/autocomplete/json",
     );
@@ -51,14 +75,12 @@ export async function POST(req: NextRequest) {
         // Surface any Google API error to the client for debugging
         if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
             console.error("[Places Autocomplete] Google API error:", JSON.stringify(data));
-            return NextResponse.json(
-                {
-                    error: `Google API returned status: ${data.status}`,
-                    error_message: data.error_message || null,
-                    full_response: data,
-                },
-                { status: 502 },
-            );
+            const predictions = getLocalPredictions(input);
+            return NextResponse.json({
+                predictions,
+                source: "local",
+                warning: `Google Places unavailable: ${data.status}`,
+            });
         }
 
         const predictions = (data.predictions ?? []).map(
@@ -73,9 +95,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ predictions });
     } catch (e) {
         console.error("[Places Autocomplete] Fetch failed:", e);
-        return NextResponse.json(
-            { error: `Fetch to Google API failed: ${e}` },
-            { status: 502 },
-        );
+        const predictions = getLocalPredictions(input);
+        return NextResponse.json({
+            predictions,
+            source: "local",
+            warning: `Google Places fetch failed: ${e}`,
+        });
     }
 }

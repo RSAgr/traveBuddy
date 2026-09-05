@@ -1,6 +1,7 @@
 from copy import deepcopy
 
 from services.api_fetcher import build_price_features, fetch_synthetic_prices
+from store.db import PRICE_OVERRIDE_REPOSITORY
 
 
 PURI_TRAVEL_CATALOG = {
@@ -297,6 +298,35 @@ def _activity_component(option):
     return component
 
 
+def _route_key(constraints):
+    return constraints.get("destination") or PURI_TRAVEL_CATALOG["route"]["destination"]
+
+
+def _apply_price_overrides(components, constraints):
+    try:
+        overrides = PRICE_OVERRIDE_REPOSITORY.active_for_route(_route_key(constraints))
+    except Exception as exc:
+        print(f"Price overrides unavailable, using catalog prices: {exc}")
+        return components
+
+    for component in components:
+        override = overrides.get(component.get("name"))
+        if not override:
+            continue
+        original_price = component["price"]
+        if override.get("price") is not None:
+            component["price"] = int(round(override["price"]))
+        elif override.get("price_multiplier") is not None:
+            component["price"] = int(round(component["price"] * override["price_multiplier"]))
+        component.setdefault("features", {})
+        component["features"].update({
+            "manual_price_override": True,
+            "original_price": original_price,
+            "override_reason": override.get("reason"),
+        })
+    return components
+
+
 def fetch_puri_mock_prices(constraints, poll_cycle=0):
     if not _is_puri_route(constraints):
         return fetch_synthetic_prices(constraints, poll_cycle=poll_cycle)
@@ -324,4 +354,4 @@ def fetch_puri_mock_prices(constraints, poll_cycle=0):
         _activity_component(option)
         for option in PURI_TRAVEL_CATALOG["activities"]
     )
-    return components
+    return _apply_price_overrides(components, constraints)
